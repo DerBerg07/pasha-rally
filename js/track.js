@@ -1,5 +1,5 @@
 /* Track generator. Lays the road out of the printed kit's blocks (GDD: players add one block at a time):
-   [дорога + спецтайл] pieces of 2 tiles, 4-tile «No parking» zones, teleport pairs, З'їзд, 90° and 180° turns,
+   [дорога + спецтайл] pieces of 2 tiles, 3-tile «No parking» zones, teleport pairs, З'їзд, 90° and 180° turns,
    START and FINISH. Checks (signs) only sit on joints between blocks, СТО pockets are added afterwards.
    1 unit = one straight tile. */
 (function () {
@@ -138,7 +138,7 @@
       const n = placed.length;
       const opts = [];
       if (cnt.B2 < maxB2) opts.push({ w: 4, v: { kind: 'B2', piece: { t: 'S', n: 2 } } });
-      if (cnt.NP < maxNP && lastKind !== 'NP' && n >= 3 && n < target - 3) opts.push({ w: 0.7, v: { kind: 'NP', piece: { t: 'S', n: 4 } } });
+      if (cnt.NP < maxNP && lastKind !== 'NP' && n >= 3 && n < target - 3) opts.push({ w: 0.7, v: { kind: 'NP', piece: { t: 'S', n: 3 } } });
       if (cnt.EX < maxEX && n >= 5 && n < target - 2 && lastKind !== 'EX') {
         const ex = exitTarget(P, h);
         if (ex) opts.push({ w: 3, v: { kind: 'EX', piece: { t: 'S', n: 1 }, exit: ex } });
@@ -203,7 +203,7 @@
     // fixed blocks
     const exits = [];
     blocks.forEach(b => {
-      if (b.kind === 'NP') for (let k = 0; k < 4; k++) Object.assign(cells[b.first + k], { type: 'noparking', npStart: b.first });
+      if (b.kind === 'NP') for (let k = 0; k < b.n; k++) Object.assign(cells[b.first + k], { type: 'noparking', npStart: b.first });
       if (b.kind === 'EX') {
         const c = cells[b.first];
         Object.assign(c, { type: 'exit', exitTo: b.exit.j, exitN: b.exit.n });

@@ -22,6 +22,7 @@
           pos: 0, hp: r.hp, maxHp: r.hp, stars: 0, hand: [], inPit: false,
           triggered: new Set(), flags: {}, epoch: 0,
           stats: { deaths: 0, arrests: 0, cards: 0 },
+          jumps: pc.racer === 'hare' ? 3 : 0,
         };
       });
       this.deck = [];
@@ -466,8 +467,8 @@
           moved = true;
           const max = p.racer === 'cheetah' ? 3 : 2;
           await this.diceMove(p, Math.max(1, Math.min(max, act.n)));
-        } else if (act.type === 'jump' && !moved && p.racer === 'hare') {
-          if (await this.hareJump(p)) moved = true;
+        } else if (act.type === 'jump' && this.canJump(p)) {
+          await this.hareJump(p);
         } else if (act.type === 'card') {
           await this.playCard(p, act.uid);
         } else if (act.type === 'raccoon') {
@@ -504,16 +505,21 @@
     abort() { this.dead = true; }
 
     /* ---------- abilities ---------- */
+    /* Hare: three jumps per race, at most one per turn, on top of the normal move. */
+    canJump(p) { return p.racer === 'hare' && p.jumps > 0 && !p.flags.jumped; }
     async hareJump(p) {
+      if (!this.canJump(p)) return false;
       const options = [];
       for (const k of [2, 1, -1, -2]) {
         const t = p.pos + k;
         if (t < 0 || t > this.track.finish) continue;
         options.push({ value: k, cell: t, label: M(k > 0 ? 'optForward' : 'optBack', Math.abs(k)), sub: M('optTileSub', t, T(t)) });
       }
-      const k = await this.ask(p, { kind: 'hare', title: M('askHareTitle'), text: M('askHare'), options, cancel: M('optCancel') });
+      const k = await this.ask(p, { kind: 'hare', title: M('askHareTitle'), text: M('askHare', p.jumps), options, cancel: M('optCancel') });
       if (!k) return false;
-      this.log(M('hareJump', P(p), k), p);
+      p.jumps--;
+      p.flags.jumped = true;
+      this.log(M('hareJump', P(p), k, p.jumps), p);
       await this.moveBy(p, k);
       if (!this.over) await this.land(p);
       return true;
@@ -687,12 +693,22 @@
     }
 
     async card_jam(p, card) {
-      const ok = await this.ask(p, {
-        kind: 'confirm', card: card.id, title: this.cardTitle(card.id), text: M('askJam'),
-        options: [{ value: true, label: M('optJam') }], cancel: M('optCancel'),
+      const lp = this.leaderPos();
+      const leaders = this.players.filter(q => q !== p && !q.inPit && q.pos === lp && q.pos > 0);
+      const mode = await this.ask(p, {
+        kind: 'mode', card: card.id, title: this.cardTitle(card.id), text: M('chooseOne'), cancel: M('optCancel'),
+        options: [
+          { value: 'all', label: M('optJamAll'), sub: M('optJamAllSub') },
+          { value: 'leader', label: M('optJamLeader'), disabled: !leaders.length, sub: leaders.length ? M('optName', P(leaders[0])) : M('optJamYouLead') },
+        ],
       });
-      if (!ok) return;
+      if (!mode) return;
       this.spend(p, card);
+      if (mode === 'leader') {
+        for (const q of leaders) { this.log(M('jamLeader', P(q)), q); await this.moveBy(q, -3); }
+        for (const q of leaders) await this.land(q);
+        return;
+      }
       const moved = this.players.filter(q => q !== p && !q.inPit && q.pos > 0);
       for (const q of moved) await this.moveBy(q, -1);
       for (const q of moved) await this.land(q);

@@ -93,15 +93,19 @@
       const v = expectedDice(G, p, n);
       if (v > bestV + 0.01) { bestV = v; best = { type: 'roll', n }; }
     }
-    if (p.racer === 'hare') {
-      for (const k of [2, 1, -1, -2]) {
-        const t = p.pos + k;
-        if (t < 0 || t > G.track.finish) continue;
-        const v = tileValue(G, p, t);
-        if (v > bestV) { bestV = v; best = { type: 'jump' }; p._hare = k; }
-      }
-    }
     return best;
+  }
+  /* Best Hare jump right now, or null when it is not worth one of the three jumps. */
+  function planJump(G, p, moved) {
+    if (!G.canJump(p)) return null;
+    let bestK = null, bestV = moved ? 1.8 : 3;
+    for (const k of [2, 1, -1, -2]) {
+      const t = p.pos + k;
+      if (t < 0 || t > G.track.finish) continue;
+      const v = tileValue(G, p, t);
+      if (v >= bestV) { bestV = v; bestK = k; }
+    }
+    return bestK;
   }
 
   const threat = (G, p, q) => q.pos >= p.pos - 3;
@@ -183,7 +187,8 @@
           const ahead = hit.filter(q => q.pos >= p.pos).length;
           const s = hit.length * 0.45 + ahead * 0.4;
           const lead = hit.slice().sort((a, b) => b.pos - a.pos)[0];
-          if (s >= 1.6 && lead) hostile(s, lead);
+          if (s >= 1.6 && lead) hostile(s, lead, { mode: 'all' });
+          if (lead && lead.pos === G.leaderPos() && lead.pos >= p.pos - 2) hostile(1.4 + (lead.pos > p.pos ? 0.8 : 0), lead, { mode: 'leader' });
           break;
         }
         case 'feint': {
@@ -225,6 +230,8 @@
           return { type: 'card', uid: plan.uid };
         }
       }
+      const jump = planJump(G, p, moved);
+      if (jump !== null) { p._hare = jump; return { type: 'jump' }; }
       if (!moved) return chooseMove(G, p);
       return { type: 'end' };
     },

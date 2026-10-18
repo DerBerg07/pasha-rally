@@ -575,7 +575,7 @@
     g.discard = s.discard;
     s.players.forEach((q, i) => {
       const p = g.players[i];
-      Object.assign(p, { pos: q.pos, hp: q.hp, maxHp: q.maxHp, stars: q.stars, inPit: q.inPit, bot: q.bot, flags: q.flags, stats: q.stats });
+      Object.assign(p, { pos: q.pos, hp: q.hp, maxHp: q.maxHp, stars: q.stars, inPit: q.inPit, bot: q.bot, flags: q.flags, stats: q.stats, jumps: q.jumps });
       p.hand = Array.isArray(q.hand) ? q.hand : Array.from({ length: q.hand }, () => ({ uid: 0, id: 'lair' }));
     });
     refresh();
@@ -633,7 +633,7 @@
           <span class="sname">${esc(p.name)} <span class="sracer">${esc(nm(AR.racer(p.racer)))}${tag}</span></span>
           <span class="sbar"><span style="width:${pct}%"></span></span>
           <span class="sstats"><span class="hp" title="${esc(t('hpTitle', p.hp, p.maxHp))}">${pips(p.hp, p.maxHp, GEAR)}</span><span class="stars" title="${esc(t('starsTitle', p.stars))}">${pips(p.stars, 6, STAR, 'st')}</span><span class="ccount" title="${esc(t('cardsInHand'))}">${p.hand.length}<i></i></span></span>
-          ${p.inPit ? `<span class="schips"><span class="chip pit">${t('chipPit')}</span></span>` : ''}
+          ${p.inPit || p.jumps ? `<span class="schips">${p.inPit ? `<span class="chip pit">${t('chipPit')}</span>` : ''}${p.jumps ? `<span class="chip">${t('chipJumps', p.jumps)}</span>` : ''}</span>` : ''}
         </span>
         <span class="spos" title="${esc(t('tileWord'))}">${p.pos}</span>
       </div>`;
@@ -658,8 +658,8 @@
       const btns = [];
       if (!moved) {
         for (let n = 1; n <= max; n++) btns.push(`<button type="button" class="btn roll ${n === 2 ? 'primary' : ''}" data-roll="${n}"><span class="mini-dice">${[5, 3, 6].slice(0, n).map(dieHTML).join('')}</span>${t('diceN', n)}<kbd>${n}</kbd></button>`);
-        if (p.racer === 'hare') btns.push(`<button type="button" class="btn roll" data-act="jump">${t('hareBtn')}<kbd>J</kbd></button>`);
       }
+      if (g.canJump(p)) btns.push(`<button type="button" class="btn ghost" data-act="jump">${t('hareBtn', p.jumps)}<kbd>J</kbd></button>`);
       if (g.canRaccoon(p)) btns.push(`<button type="button" class="btn ghost" data-act="raccoon">${t('raccoonBtn')}</button>`);
       if (moved) btns.push(`<button type="button" class="btn primary" data-act="end">${t('endTurn')}<kbd>E</kbd></button>`);
       actions = `${moved ? '' : `<p class="act-title">${t('rollTitle')}</p>`}<div class="actions">${btns.join('')}</div><p class="hint act-hint">${t(moved ? 'hintMoved' : 'hintBefore')}</p>`;
@@ -738,7 +738,7 @@
       const p = S.game.players[S.game.current];
       const max = p.racer === 'cheetah' ? 3 : 2;
       if (!S.turnMoved && ['1', '2', '3'].includes(k) && +k <= max) resolveTurn({ type: 'roll', n: +k });
-      else if (!S.turnMoved && k === 'j' && p.racer === 'hare') resolveTurn({ type: 'jump' });
+      else if (k === 'j' && S.game.canJump(p)) resolveTurn({ type: 'jump' });
       else if (S.turnMoved && (k === 'e' || k === 'enter')) resolveTurn({ type: 'end' });
     });
     $('#btn-menu').addEventListener('click', async () => {
@@ -1113,7 +1113,7 @@
       deck: g.deck.length, discard: g.discard.map(c => ({ uid: c.uid, id: c.id })),
       players: g.players.map(p => ({
         pos: p.pos, hp: p.hp, maxHp: p.maxHp, stars: p.stars, inPit: p.inPit, bot: p.bot,
-        flags: { raccoonUsed: !!p.flags.raccoonUsed }, stats: p.stats,
+        flags: { raccoonUsed: !!p.flags.raccoonUsed, jumped: !!p.flags.jumped }, stats: p.stats, jumps: p.jumps,
         hand: p.id === pid ? p.hand.map(c => ({ uid: c.uid, id: c.id })) : p.hand.length,
       })),
     };

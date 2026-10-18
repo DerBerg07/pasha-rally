@@ -3,8 +3,8 @@ window.AR = window.AR || {};
 
 AR.RACERS = [
   { id: 'hare', name: 'Заєць', name_en: 'Hare', hp: 3, bg: '#f4a9c9',
-    ability: 'Замість звичайного ходу можеш стрибнути на 1 або 2 тайли вперед чи назад, ігноруючи всі перевірки на шляху',
-    ability_en: 'Instead of a normal move you may jump 1 or 2 tiles forward or back, ignoring all checks on the way' },
+    ability: 'Тричі за гру можеш стрибнути на 1 або 2 тайли вперед чи назад, ігноруючи всі перевірки на шляху. Стрибок не замінює звичайний хід',
+    ability_en: 'Three times per race you may jump 1 or 2 tiles forward or back, ignoring all checks on the way. The jump does not replace your normal move' },
   { id: 'cheetah', name: 'Гепард', name_en: 'Cheetah', hp: 2, bg: '#8ccbec',
     ability: 'Можеш кидати до 3 кубів на швидкість',
     ability_en: 'You may roll up to 3 dice for speed' },
@@ -60,7 +60,8 @@ AR.CARDS = {
   looting:    { count: 4, name: 'Мародерство', name_en: 'Looting',
     text: 'Візьми карту з відбою', text_en: 'Take a card from the discard pile' },
   jam:        { count: 6, name: 'Затор', name_en: 'Traffic Jam',
-    text: 'Усі інші гравці — на 1 тайл назад', text_en: 'All other players go 1 tile back' },
+    text: '<b>Обери одне:</b> • усі інші гравці — на 1 тайл назад; • посунь лідера на 3 тайли назад',
+    text_en: '<b>Choose one:</b> • all other players go 1 tile back; • move the leader 3 tiles back' },
   feint:      { count: 8, name: 'Фінт', name_en: 'Feint',
     text: 'Перемістись на будь-яку кількість тайлів до свого ★ (мінімум 1)',
     text_en: 'Move any number of tiles up to your ★ (minimum 1)' },
@@ -146,7 +147,7 @@ AR.PIT = { name: 'СТО', name_en: 'Pit stop',
 AR.KIT = {
   straight: { crossing: 6, nitro: 5, car: 6, chase: 5, box: 6 }, // [дорога + спецтайл] blocks
   teleports: 3,      // pairs: pink, orange, cyan
-  noparking: 3,      // 4-tile blocks
+  noparking: 3,      // 3-tile blocks
   exits: 4,
   turn90: 16,
   turn180: 8,
