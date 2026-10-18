@@ -7,135 +7,145 @@
 <meta name="description" content="Animal Rally — настільна гра-перегони для 2–6 гравців у браузері / a racing board game for 2–6 players in the browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800;900&family=Golos+Text:wght@400;500;600;700&family=Lora:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Onest:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;800&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <!-- MENU -->
 <main id="menu" class="menu">
-  <header class="menu-head">
-    <div class="brand">
+  <div id="track-preview" class="scene menu-scene" aria-hidden="true"></div>
+  <div class="menu-ui">
+    <header class="menu-brand">
       <p class="brand-kicker" data-i18n="kicker"></p>
       <h1 class="wordmark"><span>Animal</span> <span>Rally</span></h1>
       <p class="brand-sub" data-i18n="tagline"></p>
-    </div>
+    </header>
     <div class="head-actions">
       <span class="seg lang-seg" role="group" data-i18n-aria="language">
         <button type="button" data-lang="uk">УКР</button>
         <button type="button" data-lang="en">ENG</button>
       </span>
-      <button type="button" id="btn-rules-menu" class="btn ghost" data-i18n="rulesBtn"></button>
+      <button type="button" id="btn-rules-menu" class="btn" data-i18n="rulesBtn"></button>
     </div>
-  </header>
 
-  <div class="menu-grid">
-    <section class="panel crew" aria-labelledby="crew-title">
-      <div class="panel-head">
-        <h2 id="crew-title" data-i18n="crews"></h2>
-        <span class="hint" id="players-count"></span>
-      </div>
-      <ol id="player-slots" class="slots"></ol>
-      <button type="button" id="btn-add-player" class="btn ghost small" data-i18n="addPlayer"></button>
-      <h3 class="label"><span data-i18n="racers"></span> <span class="hint" data-i18n="racersHint"></span></h3>
-      <div id="racer-gallery" class="racer-gallery"></div>
-    </section>
+    <div class="menu-col">
+      <section class="sticker crew" aria-labelledby="crew-title">
+        <div class="panel-head">
+          <h2 id="crew-title" data-i18n="crews"></h2>
+          <span class="count-pill" id="players-count"></span>
+        </div>
+        <ol id="player-slots" class="slots"></ol>
+        <button type="button" id="btn-add-player" class="btn ghost small" data-i18n="addPlayer"></button>
+        <h3 class="label"><span data-i18n="racers"></span> <span class="hint" data-i18n="racersHint"></span></h3>
+        <div id="racer-gallery" class="racer-gallery"></div>
+      </section>
 
-    <section class="panel route" aria-labelledby="route-title">
-      <div class="panel-head">
+      <section class="sticker setup" aria-labelledby="setup-title">
+        <h2 id="setup-title" class="sr-only" data-i18n="animation"></h2>
+        <div class="settings">
+          <label class="field" for="opt-speed"><span data-i18n="animation"></span>
+            <select id="opt-speed">
+              <option value="slow" data-i18n="speedSlow"></option>
+              <option value="normal" data-i18n="speedNormal"></option>
+              <option value="fast" data-i18n="speedFast"></option>
+            </select>
+          </label>
+          <label class="check" id="opt-handoff-wrap" for="opt-handoff">
+            <input type="checkbox" id="opt-handoff" checked>
+            <span data-i18n="optHandoff"></span>
+          </label>
+          <label class="check" for="opt-confirm">
+            <input type="checkbox" id="opt-confirm">
+            <span><span data-i18n="optConfirmBots"></span><small class="hint" data-i18n="optConfirmBotsHint"></small></span>
+          </label>
+        </div>
+        <div class="online" id="online">
+          <h3 class="label" data-i18n="netTitle"></h3>
+          <p class="hint" data-i18n="netIntro"></p>
+          <div id="net-idle" class="net-idle">
+            <button type="button" id="btn-net-host" class="btn small" data-i18n="netHost"></button>
+            <span class="net-join">
+              <input id="net-code" class="net-input code" maxlength="5" autocomplete="off" spellcheck="false" data-i18n-ph="netCodePh" data-i18n-aria="netCode">
+              <input id="net-name" class="net-input" maxlength="16" autocomplete="nickname" data-i18n-ph="netYourName" data-i18n-aria="netYourName">
+              <button type="button" id="btn-net-join" class="btn small" data-i18n="netJoin"></button>
+            </span>
+          </div>
+          <div id="net-status" class="net-status" hidden></div>
+        </div>
+      </section>
+      <p class="foot" data-i18n="foot"></p>
+    </div>
+
+    <section class="sticker trackbar" aria-labelledby="route-title">
+      <div class="trackbar-row">
         <h2 id="route-title" data-i18n="track"></h2>
         <span class="seed" id="seed-label"></span>
+        <div class="seg" id="size-seg" role="radiogroup" data-i18n-aria="trackLength">
+          <button type="button" role="radio" data-size="short" data-i18n="sizeShort"></button>
+          <button type="button" role="radio" data-size="medium" data-i18n="sizeMedium"></button>
+          <button type="button" role="radio" data-size="long" data-i18n="sizeLong"></button>
+        </div>
+        <button type="button" id="btn-reroll" class="btn small" data-i18n="reroll"></button>
       </div>
-      <div class="seg" id="size-seg" role="radiogroup" data-i18n-aria="trackLength">
-        <button type="button" role="radio" data-size="short" data-i18n="sizeShort"></button>
-        <button type="button" role="radio" data-size="medium" data-i18n="sizeMedium"></button>
-        <button type="button" role="radio" data-size="long" data-i18n="sizeLong"></button>
-      </div>
-      <div class="track-preview" id="track-preview"></div>
-      <div class="route-row">
-        <button type="button" id="btn-reroll" class="btn ghost small" data-i18n="reroll"></button>
-        <span class="hint" id="track-stats"></span>
-      </div>
-      <div class="settings">
-        <label class="field" for="opt-speed"><span data-i18n="animation"></span>
-          <select id="opt-speed">
-            <option value="slow" data-i18n="speedSlow"></option>
-            <option value="normal" data-i18n="speedNormal"></option>
-            <option value="fast" data-i18n="speedFast"></option>
-          </select>
-        </label>
-        <label class="check" id="opt-handoff-wrap" for="opt-handoff">
-          <input type="checkbox" id="opt-handoff" checked>
-          <span data-i18n="optHandoff"></span>
-        </label>
-        <label class="check" for="opt-confirm">
-          <input type="checkbox" id="opt-confirm">
-          <span><span data-i18n="optConfirmBots"></span><small class="hint" data-i18n="optConfirmBotsHint"></small></span>
-        </label>
-      </div>
+      <p class="hint mono" id="track-stats"></p>
       <button type="button" id="btn-start" class="btn primary big" data-i18n="start"></button>
       <p id="client-wait" class="client-wait" data-i18n="netWaiting" hidden></p>
-
-      <div class="online" id="online">
-        <h3 class="label" data-i18n="netTitle"></h3>
-        <p class="hint" data-i18n="netIntro"></p>
-        <div id="net-idle" class="net-idle">
-          <button type="button" id="btn-net-host" class="btn ghost small" data-i18n="netHost"></button>
-          <span class="net-join">
-            <input id="net-code" class="net-input code" maxlength="5" autocomplete="off" spellcheck="false" data-i18n-ph="netCodePh" data-i18n-aria="netCode">
-            <input id="net-name" class="net-input" maxlength="16" autocomplete="nickname" data-i18n-ph="netYourName" data-i18n-aria="netYourName">
-            <button type="button" id="btn-net-join" class="btn ghost small" data-i18n="netJoin"></button>
-          </span>
-        </div>
-        <div id="net-status" class="net-status" hidden></div>
-      </div>
     </section>
   </div>
-  <p class="foot" data-i18n="foot"></p>
 </main>
 
 <!-- GAME -->
 <main id="game" class="game" hidden>
-  <header class="topbar">
-    <span class="wordmark small"><span>Animal</span> <span>Rally</span></span>
-    <span class="turn-info" id="turn-info"></span>
-    <span class="top-actions">
+  <div class="scene game-scene"><div class="board-scroll"><div id="board" class="board"></div></div></div>
+  <header class="hud-top">
+    <div class="hud-left">
+      <span class="wordmark small"><span>Animal</span> <span>Rally</span></span>
+      <span class="turn-info" id="turn-info"></span>
+    </div>
+    <div class="hud-tools">
+      <span class="cam-tools" role="group" data-i18n-aria="camera">
+        <button type="button" class="icon-btn" id="cam-left" data-i18n-aria="camLeft"><svg viewBox="0 0 24 24"><path d="M9 7H4V2M4.5 7a9 9 0 1 1-.7 8.5"/></svg></button>
+        <button type="button" class="icon-btn" id="cam-right" data-i18n-aria="camRight"><svg viewBox="0 0 24 24"><path d="M15 7h5V2M19.5 7a9 9 0 1 0 .7 8.5"/></svg></button>
+        <button type="button" class="icon-btn" id="cam-out" data-i18n-aria="camOut"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+        <button type="button" class="icon-btn" id="cam-in" data-i18n-aria="camIn"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg></button>
+        <button type="button" class="btn small" id="cam-follow" aria-pressed="false"></button>
+      </span>
       <span class="seg lang-seg mini" role="group" data-i18n-aria="language">
         <button type="button" data-lang="uk">УКР</button>
         <button type="button" data-lang="en">ENG</button>
       </span>
-      <button type="button" id="btn-speed" class="btn ghost small"></button>
-      <button type="button" id="btn-rules-game" class="btn ghost small" data-i18n="rules"></button>
-      <button type="button" id="btn-menu" class="btn ghost small" data-i18n="menu"></button>
-    </span>
+      <button type="button" id="btn-speed" class="btn small"></button>
+      <button type="button" id="btn-rules-game" class="btn small" data-i18n="rules"></button>
+      <button type="button" id="btn-menu" class="btn small" data-i18n="menu"></button>
+    </div>
   </header>
-  <div class="game-grid">
-    <section class="stage" aria-label="Track">
-      <div class="board-scroll"><div id="board" class="board"></div></div>
-      <div id="dice-tray" class="dice-tray" hidden></div>
-      <div id="banner" class="banner" hidden></div>
-      <div id="played" class="played" hidden></div>
-      <div id="next-bar" class="next-bar" hidden></div>
-    </section>
-    <aside class="side">
-      <div id="standings" class="standings"></div>
-      <div id="dash" class="dash"></div>
-      <div id="hand" class="hand"></div>
-      <details class="log-wrap" open>
-        <summary data-i18n="log"></summary>
-        <ol id="log" class="log"></ol>
-      </details>
-    </aside>
-  </div>
+  <details class="sticker log-wrap" id="log-wrap">
+    <summary><span data-i18n="log"></span><span class="log-last" id="log-last"></span></summary>
+    <ol id="log" class="log"></ol>
+  </details>
+  <div id="dice-tray" class="dice-tray" hidden></div>
+  <div id="banner" class="banner" hidden></div>
+  <div id="played" class="played" hidden></div>
+  <div id="next-bar" class="next-bar" hidden></div>
+  <aside class="hud-right sticker" id="hud-right"><div id="standings" class="standings"></div></aside>
+  <section class="hud-bottom" id="hud-bottom">
+    <div id="dash" class="dash sticker"></div>
+    <div id="hand" class="hand"></div>
+  </section>
 </main>
 
 <div id="modal" class="modal" hidden></div>
 <div id="modal2" class="modal" hidden></div>
 <div id="tooltip" class="tooltip" hidden></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.158.0/three.min.js"></script>
 <script src="js/data.js"></script>
 <script src="js/i18n.js"></script>
+<script src="js/texdata.js"></script>
 <script src="js/track.js"></script>
 <script src="js/board.js"></script>
+<script src="js/models.js"></script>
+<script src="js/board3d.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/net.js"></script>

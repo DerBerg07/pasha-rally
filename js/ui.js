@@ -75,6 +75,7 @@
     if (S.track) trackStats(S.track);
     renderNet();
     updateSpeedBtn();
+    followBtn();
     if (S.game) { refresh(); renderLog(); }
   }
 
@@ -147,8 +148,17 @@
     $('#seed-label').textContent = `№ ${tr.seed}`;
     $('#track-stats').textContent = t('trackStats', tr.blocks.length, tr.cells.length, turns, signs, tr.pits.length);
   }
+  /* the menu diorama sits behind the panels: tell the camera which part of the screen is free */
+  function previewInsets() {
+    if (!S.preview || !S.preview.setInsets) return;
+    const narrow = innerWidth <= 960;
+    if (narrow) { S.preview.setInsets({ top: 150, bottom: innerHeight * 0.42, left: 8, right: 8 }); return; }
+    const col = $('.menu-col').getBoundingClientRect(), bar = $('.trackbar').getBoundingClientRect();
+    S.preview.setInsets({ top: 70, left: col.right + 10, right: 18, bottom: innerHeight - bar.top + 10 });
+  }
   function renderPreview(tr) {
-    if (!S.preview) S.preview = new AR.Board($('#track-preview'), { interactive: true });
+    if (!S.preview) S.preview = new AR.Board($('#track-preview'), { interactive: true, preview: true });
+    previewInsets();
     S.preview.render(tr);
     trackStats(tr);
     $$('#size-seg button').forEach(x => { const on = x.dataset.size === tr.sizeKey; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
@@ -511,9 +521,36 @@
     S.game = null;
   }
   function setupBoard(track) {
-    S.board = new AR.Board($('#board'), { interactive: true });
+    if (!S.board) {
+      S.board = new AR.Board($('#board'), { interactive: true, follow: true });
+      S.board.onFollowChange = followBtn;
+    }
     S.board.render(track);
     S.board.onPick = pick => { if (S.onBoardPick) S.onBoardPick(pick); };
+    requestAnimationFrame(gameInsets);
+    followBtn();
+  }
+  /* keep the camera framing clear of the HUD stickers */
+  function gameInsets() {
+    if (!S.board || !S.board.setInsets || $('#game').hidden) return;
+    const narrow = innerWidth <= 960;
+    const bottom = $('#hud-bottom').getBoundingClientRect();
+    document.documentElement.style.setProperty('--sheet', Math.round(innerHeight - bottom.top) + 'px');
+    if (narrow) {
+      const strip = $('#hud-right').getBoundingClientRect();
+      S.board.setInsets({ top: strip.bottom + 6, bottom: innerHeight - bottom.top + 6, left: 6, right: 6 });
+    } else {
+      const right = $('#hud-right').getBoundingClientRect();
+      S.board.setInsets({ top: 64, right: innerWidth - right.left + 10, bottom: innerHeight - bottom.top + 6, left: 14 });
+    }
+  }
+  function followBtn() {
+    const b = $('#cam-follow');
+    if (!b) return;
+    const on = !!(S.board && S.board.follow);
+    b.textContent = t('camFollow');
+    b.setAttribute('aria-pressed', on);
+    $('.cam-tools').hidden = !(S.board && S.board.setInsets);
   }
 
   function startGame() {
@@ -697,6 +734,8 @@
     const own = g.mirror || v.id === g.current || localHumans().length === 1;
     box.innerHTML = `<h2 class="side-title">${own ? t('yourHand') : esc(t('handOf', v.name))} <span class="hint">${t('handOfSix', v.hand.length)}</span></h2>
       <div class="hand-cards">${cards || `<p class="hint">${t('noCards')}</p>`}</div>`;
+    const fan = $$('.hand-cards .card', box), mid = (fan.length - 1) / 2;
+    fan.forEach((el, i) => { el.style.setProperty('--i', i); el.style.setProperty('--mid', mid); el.style.setProperty('--d', Math.abs(i - mid)); });
   }
 
   function refresh() {
@@ -746,6 +785,12 @@
       if (ok) toMenu();
     });
     $('#btn-rules-game').addEventListener('click', openRules);
+    $('#cam-left').addEventListener('click', () => S.board && S.board.rotate && S.board.rotate(-1));
+    $('#cam-right').addEventListener('click', () => S.board && S.board.rotate && S.board.rotate(1));
+    $('#cam-in').addEventListener('click', () => S.board && S.board.zoom && S.board.zoom(1.3));
+    $('#cam-out').addEventListener('click', () => S.board && S.board.zoom && S.board.zoom(1 / 1.3));
+    $('#cam-follow').addEventListener('click', () => { if (S.board && S.board.toggleFollow) { S.board.toggleFollow(); followBtn(); } });
+    window.addEventListener('resize', () => { gameInsets(); previewInsets(); });
     $('#btn-speed').addEventListener('click', () => {
       const order = ['slow', 'normal', 'fast'];
       S.setup.speed = order[(order.indexOf(S.setup.speed) + 1) % 3];
@@ -784,6 +829,8 @@
     const ol = $('#log');
     ol.prepend(logItem(e));
     while (ol.children.length > 150) ol.lastChild.remove();
+    const last = $('#log-last');
+    if (last) last.textContent = AR.plain(fmt(m));
   }
   function renderLog() {
     const ol = $('#log');
@@ -1023,6 +1070,7 @@
     }
     if (local) { S.revealed = p.id; S.lastHuman = p.id; }
     refresh();
+    gameInsets();
   }
 
   function turnAction(p, moved) {
