@@ -140,8 +140,8 @@ AR.CHECKS = {
 };
 
 AR.PIT = { name: 'СТО', name_en: 'Pit stop',
-  text: 'Можеш заїхати, проїжджаючи повз, незалежно від залишку швидкості. На початку наступного ходу відновлюєш ХП. На станції ти невразливий до урону й до карток, що пересувають машини. Сюди повертаєшся після смерті.',
-  text_en: 'Pull in as you drive past, whatever speed you have left. At the start of your next turn you repair to full HP. While in the pit you are immune to damage and to cards that move cars. You respawn here after dying.' };
+  text: 'Можеш заїхати, проїжджаючи повз, незалежно від залишку швидкості. На початку наступного ходу відновлюєш ХП. Поки стоїш на станції, ти не взаємодієш з гравцями на трасі, а вони — з тобою. Виїзд на трасу — перший крок руху. Сюди повертаєшся після смерті.',
+  text_en: 'Pull in as you drive past, whatever speed you have left. At the start of your next turn you repair to full HP. While in the pit you can’t interact with racers on the track, and they can’t interact with you. Driving back onto the track is the first step of your move. You respawn here after dying.' };
 
 /* The printed kit (Animal_Rally_Map.pdf): what a track can be built from. */
 AR.KIT = {
