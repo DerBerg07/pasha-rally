@@ -67,7 +67,7 @@
       return tileValue(G, p, pos, hp, stars) + extra;
     };
     const skids = p.hand.filter(c => c.id === 'skid').length; // Skid is a reaction: it cancels one crash or camera
-    return rec(p.pos, 0, p.hp, p.stars, skids, skids, 0, -1);
+    return rec(p.pos, p.inPit ? 1 : 0, p.hp, p.stars, skids, skids, 0, -1); // leaving a pit costs the first step
   }
 
   function expectedDice(G, p, n) {
@@ -117,7 +117,7 @@
       if (seen.has(card.id) || !G.playable(p, card.id).ok) continue;
       seen.add(card.id);
       const add = (score, extra) => plans.push(Object.assign({ uid: card.uid, card: card.id, score }, extra));
-      const opp = G.players.filter(q => q !== p);
+      const opp = G.reachable(p);
       // casual bots: hostile cards mostly target whoever is close to the finish
       const rage = q => { const prog = q.pos / G.track.finish; return prog >= 0.7 ? 1 : 0.25 + prog; };
       const hostile = (score, q, extra) => { if (!p.flags.hostile) add(score * rage(q), Object.assign({ hostile: true }, extra)); };
@@ -244,7 +244,8 @@
         case 'mode': return plan && has(plan.mode) ? plan.mode : (enabled[0] ? enabled[0].value : null);
         case 'player': {
           if (plan && has(plan.target)) return plan.target;
-          return enabled.length ? enabled[0].value : null;
+          const pool = req.purpose === 'star' ? enabled.filter(o => o.value !== p.id) : enabled; // never frame yourself by accident
+          return pool.length ? pool[0].value : null;
         }
         case 'dir': return plan && plan.dir ? plan.dir : -1;
         case 'cell': return plan && has(plan.cell) ? plan.cell : (enabled[0] ? enabled[0].value : null);

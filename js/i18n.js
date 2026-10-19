@@ -153,6 +153,7 @@
     whyNoRacket: 'Немає гравця з меншим ★ і картами',
     whyDiscardEmpty: 'Відбій порожній',
     whyHpFull: 'ХП і так повне',
+    whyInPit: 'На СТО не можна взаємодіяти з гравцями на трасі',
     whyOwnTurn: 'Грається у свій хід',
 
     /* ----- interface ----- */
@@ -308,7 +309,7 @@
     rStarsH: 'Розшук ★',
     rStars: 'Зірки дають пішохідні переходи, камери, обгін у зоні заборони та деякі карти. Ще ★ отримуєш, якщо через тебе гине інший гравець. Що більше зірок, то сильніше б’ють Погоня, Поліція і Митниця. На <b>шостій ★ — арешт</b>: їдеш на найближче СТО позаду (або на START), зірки скидаються. Зняти ★ раніше можуть лише Маневр і здібність Єнота.',
     rDeathH: 'Смерть і СТО',
-    rDeath: 'Гонщик гине, коли ХП падає до нуля або при арешті. Він повертається на найближче СТО позаду (або на START); загибель від ран відновлює ХП, арешт обнуляє ★. Картки лишаються, хід не пропускаєш. На СТО можна заїхати, проїжджаючи повз; на початку наступного ходу там відновлюєш ХП і, поки стоїш, невразливий до урону й карток, що пересувають машини.',
+    rDeath: 'Гонщик гине, коли ХП падає до нуля або при арешті. Він повертається на найближче СТО позаду (або на START); загибель від ран відновлює ХП, арешт обнуляє ★. Картки лишаються, хід не пропускаєш. На СТО можна заїхати, проїжджаючи повз; на початку наступного ходу там відновлюєш ХП. Поки стоїш на СТО, ти не взаємодієш з гравцями на трасі, а вони — з тобою. Виїзд зі СТО на трасу — перший крок руху.',
     rCardsH: 'Карти',
     rCards: 'Дії тримаєш на руці й граєш у свій хід. Позначені «Реакція» граються в потрібну мить, навіть не у свій хід: Ручник — одразу після кидка швидкості, Занос — коли вилітаєш на повороті чи ловишся на камеру, Чит — у мить смерті. Події спрацьовують одразу, щойно їх витягнули, і замість них добирається інша карта. Доносів у колоді: 2 гравці — 2, 3–4 — 1, 5–6 — жодного.',
     rTilesH: 'Тайли зупинки',
@@ -453,6 +454,7 @@
     whyNoRacket: 'No player with fewer ★ and cards in hand',
     whyDiscardEmpty: 'The discard pile is empty',
     whyHpFull: 'HP is already full',
+    whyInPit: 'From a pit stop you can’t interact with racers on the track',
     whyOwnTurn: 'Played on your own turn',
 
     title: 'Animal Rally',
@@ -605,7 +607,7 @@
     rStarsH: 'Wanted ★',
     rStars: 'Stars come from pedestrian crossings, cameras, overtaking in a no-overtaking zone and some cards. You also get a ★ when another racer dies because of you. The more stars, the harder Chase, Police and Customs hit you. On the <b>sixth ★ you are arrested</b>: back to the nearest pit stop behind you (or START), and your stars reset. Only Maneuver and the Raccoon’s ability remove stars earlier.',
     rDeathH: 'Death and pit stops',
-    rDeath: 'A racer dies when HP drops to zero or when arrested. They return to the nearest pit stop behind them (or START); dying from damage restores HP, an arrest clears the stars. You keep your cards and don’t lose a turn. You may pull into a pit stop as you drive past; at the start of your next turn you repair there, and while you stay you are immune to damage and to cards that move cars.',
+    rDeath: 'A racer dies when HP drops to zero or when arrested. They return to the nearest pit stop behind them (or START); dying from damage restores HP, an arrest clears the stars. You keep your cards and don’t lose a turn. You may pull into a pit stop as you drive past; at the start of your next turn you repair there. While in the pit you can’t interact with racers on the track, and they can’t interact with you. Driving out of the pit onto the track is the first step of your move.',
     rCardsH: 'Cards',
     rCards: 'Actions stay in your hand and are played on your turn. Cards marked “Reaction” are played at the right moment, even on someone else’s turn: Handbrake right after a speed roll, Skid when you fly off a turn or get caught by a camera, Cheat at the moment of death. Events fire as soon as they are drawn, and you draw another card instead. Snitch copies in the deck: 2 players — 2, 3–4 — 1, 5–6 — none.',
     rTilesH: 'Stop tiles',

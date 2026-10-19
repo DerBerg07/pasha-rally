@@ -302,6 +302,7 @@
         for (const q of order) {
           const card = q.hand.find(c => c.id === 'handbrake');
           if (!card) continue;
+          if (q !== roller && (q.inPit || roller.inPit)) continue; // nobody reaches into or out of a pit stop
           const speed = this.speedOf(roller, dice, mod);
           const options = [
             { value: '+2', label: M('optSpeedPlus'), sub: M('optSpeedWillBe', this.speedOf(roller, dice, mod + 2)) },
@@ -350,10 +351,16 @@
       const speed = this.speedOf(p, dice, mod);
       this.log(M('roll', P(p), dice.join(' + '), p.racer === 'turtle', mod, speed), p);
       if (speed === 0) { this.log(M('standStill', P(p)), p); return; }
-      if (p.inPit) { p.inPit = false; this.log(M('leavePit', P(p)), p); }
       const ep = p.epoch;
       const passed = new Set();
-      for (let s = 0; s < speed; s++) {
+      let s = 0;
+      if (p.inPit) { // driving out of the pit onto the track is the first step of the move
+        p.inPit = false;
+        this.log(M('leavePit', P(p)), p);
+        await this.ui.step(p);
+        s = 1;
+      }
+      for (; s < speed; s++) {
         const b = p.pos;
         const chk = this.track.checks[b];
         if (chk) {
@@ -537,26 +544,34 @@
     }
 
     /* ---------- cards ---------- */
+    /* A racer in a pit stop is cut off from the track: they can't touch anyone, and nobody can touch them. */
+    reachable(p) { return p.inPit ? [] : this.players.filter(q => q !== p && !q.inPit); }
     targetsInRange(p, base, unlimited) {
       const r = unlimited ? Infinity : this.range(p, base);
-      return this.players.filter(q => q !== p && !q.inPit && Math.abs(q.pos - p.pos) <= r);
+      return this.reachable(p).filter(q => Math.abs(q.pos - p.pos) <= r);
     }
+    unstarTargets(p) { return this.players.filter(q => q.stars > 0 && (q === p || this.reachable(p).includes(q))); }
+    racketTargets(p) { return this.reachable(p).filter(q => q.stars < p.stars && q.hand.length); }
     assaultTargets(p) { return this.targetsInRange(p, 3, p.racer === 'eagle'); }
     playable(p, id) {
       const c = CARD(id);
       if (c.reaction) return { ok: false, why: M(id === 'cheat' ? 'whyCheat' : id === 'skid' ? 'whySkid' : 'whyHandbrake') };
       switch (id) {
         case 'maneuver':
-          return this.players.some(q => q.stars > 0) ? { ok: true } : { ok: false, why: M('whyNoStars') };
+          if (this.unstarTargets(p).length || this.reachable(p).some(q => q.stars > 0)) return { ok: true };
+          return { ok: false, why: M(p.inPit && this.players.some(q => q.stars > 0) ? 'whyInPit' : 'whyNoStars') };
         case 'setup': return { ok: true };
         case 'assault':
-          return this.assaultTargets(p).length ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 3)) };
         case 'racket':
-          return this.players.some(q => q !== p && q.stars < p.stars && q.hand.length) ? { ok: true } : { ok: false, why: M('whyNoRacket') };
         case 'harpoon':
-          return this.targetsInRange(p, 10).length ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 10)) };
         case 'checkers':
-          return this.targetsInRange(p, 4).some(q => q.pos !== p.pos) ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 4)) };
+        case 'jam':
+          if (p.inPit) return { ok: false, why: M('whyInPit') };
+          if (id === 'assault') return this.assaultTargets(p).length ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 3)) };
+          if (id === 'racket') return this.racketTargets(p).length ? { ok: true } : { ok: false, why: M('whyNoRacket') };
+          if (id === 'harpoon') return this.targetsInRange(p, 10).length ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 10)) };
+          if (id === 'checkers') return this.targetsInRange(p, 4).some(q => q.pos !== p.pos) ? { ok: true } : { ok: false, why: M('whyNoneInRange', this.range(p, 4)) };
+          return { ok: true };
         case 'looting':
           return this.discard.some(c => !CARD(c.id).event) ? { ok: true } : { ok: false, why: M('whyDiscardEmpty') };
         case 'lair':
@@ -578,8 +593,8 @@
     cardTitle(id) { return M('cardName', Cd(id)); }
 
     async card_maneuver(p, card) {
-      const a = this.players.filter(q => q.stars > 0);
-      const b = this.players.filter(q => q !== p && !q.inPit && q.stars > 0);
+      const a = this.unstarTargets(p);
+      const b = this.reachable(p).filter(q => q.stars > 0);
       const mode = await this.ask(p, {
         kind: 'mode', card: card.id, title: this.cardTitle(card.id), text: M('chooseOne'), cancel: M('optCancel'),
         options: [
@@ -614,8 +629,8 @@
     }
 
     async card_setup(p, card) {
-      const a = this.players.filter(q => q !== p);
-      const b = this.players.filter(q => !q.inPit && !this.isLeader(q));
+      const a = [p, ...this.reachable(p)]; // you may frame yourself too
+      const b = p.inPit ? [] : this.players.filter(q => !q.inPit && !this.isLeader(q));
       const mode = await this.ask(p, {
         kind: 'mode', card: card.id, title: this.cardTitle(card.id), text: M('chooseOne'), cancel: M('optCancel'),
         options: [
@@ -653,7 +668,7 @@
     }
 
     async card_racket(p, card) {
-      const list = this.players.filter(q => q !== p && q.stars < p.stars && q.hand.length);
+      const list = this.racketTargets(p);
       const q = await this.pickPlayer(p, list, { card: card.id, title: this.cardTitle(card.id), text: M('askRacket'), purpose: 'rob' },
         q => M('extraTake', Math.min(p.stars - q.stars, q.hand.length)));
       if (!q) return;
@@ -694,7 +709,7 @@
 
     async card_jam(p, card) {
       const lp = this.leaderPos();
-      const leaders = this.players.filter(q => q !== p && !q.inPit && q.pos === lp && q.pos > 0);
+      const leaders = this.reachable(p).filter(q => q.pos === lp && q.pos > 0);
       const mode = await this.ask(p, {
         kind: 'mode', card: card.id, title: this.cardTitle(card.id), text: M('chooseOne'), cancel: M('optCancel'),
         options: [
@@ -709,7 +724,7 @@
         for (const q of leaders) await this.land(q);
         return;
       }
-      const moved = this.players.filter(q => q !== p && !q.inPit && q.pos > 0);
+      const moved = this.reachable(p).filter(q => q.pos > 0);
       for (const q of moved) await this.moveBy(q, -1);
       for (const q of moved) await this.land(q);
     }
