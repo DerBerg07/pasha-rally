@@ -30,12 +30,28 @@
       this.opts = opts;
       this.tokens = new Map();
       this.onPick = null;
+      this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
+    }
+
+    /* the flat board only fills the part of the screen the HUD leaves free */
+    setInsets(ins) {
+      this.insets = Object.assign({ top: 0, right: 0, bottom: 0, left: 0 }, ins);
+      this.applyInsets();
+    }
+    applyInsets() {
+      if (!this.svg) return;
+      const i = this.insets, st = this.svg.style;
+      st.position = 'absolute';
+      st.left = i.left + 'px';
+      st.top = i.top + 'px';
+      st.width = `calc(100% - ${i.left + i.right}px)`;
+      st.height = `calc(100% - ${i.top + i.bottom}px)`;
     }
 
     render(track) {
       this.track = track;
       this.host.innerHTML = '';
-      const m = 0.5, b = track.bbox;
+      const m = 0.7, b = track.bbox;
       const svg = el('svg', {
         viewBox: `${(b.x - m) * S} ${(b.y - m) * S} ${(b.w + 2 * m) * S} ${(b.h + 2 * m) * S}`,
         preserveAspectRatio: 'xMidYMid meet', class: 'board-svg', role: 'img',
@@ -47,6 +63,10 @@
       el('circle', { cx: 0.5, cy: 0.5, r: 0.5 }, clip);
       const sh = el('filter', { id: 'tokshadow', x: '-40%', y: '-40%', width: '180%', height: '180%' }, defs);
       el('feDropShadow', { dx: 0, dy: 4, stdDeviation: 4, 'flood-color': '#000', 'flood-opacity': 0.55 }, sh);
+      // the board itself: a grass sticker with an ink outline and offset shadow
+      const bx = (b.x - m) * S, by = (b.y - m) * S, bw = (b.w + 2 * m) * S, bh = (b.h + 2 * m) * S;
+      el('rect', { x: bx + 20, y: by + 20, width: bw - 28, height: bh - 28, rx: 46, fill: '#181b23' }, svg);
+      el('rect', { x: bx + 8, y: by + 8, width: bw - 28, height: bh - 28, rx: 46, fill: '#8dcc5f', stroke: '#181b23', 'stroke-width': 9 }, svg);
 
       const gUnder = el('g', { class: 'g-under' }, svg);
       const gRoad = el('g', { class: 'g-road' }, svg);
@@ -156,6 +176,7 @@
         img.dataset.tip = JSON.stringify({ check: chk.b });
       }
       if (this.opts.interactive) this.bindTips();
+      this.applyInsets();
       return svg;
     }
 

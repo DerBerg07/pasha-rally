@@ -104,6 +104,27 @@
   }
 
   const ROAD = '#474c55', SHOULDER = '#2b2f37', LINE = '#eef0f2';
+  const TOP = 0.115; // height of a tile's top face: racers and markers stand here
+
+  /* Chunky printed tiles: a rounded square (or disc) with bevelled edges; the texture maps onto the top face. */
+  function tileGeometry(round) {
+    const s = 0.84, h = s / 2, r = 0.1;
+    const sh = new T.Shape();
+    if (round) sh.absarc(0, 0, 0.33, 0, Math.PI * 2, false);
+    else {
+      sh.moveTo(-h + r, -h); sh.lineTo(h - r, -h); sh.quadraticCurveTo(h, -h, h, -h + r);
+      sh.lineTo(h, h - r); sh.quadraticCurveTo(h, h, h - r, h); sh.lineTo(-h + r, h);
+      sh.quadraticCurveTo(-h, h, -h, h - r); sh.lineTo(-h, -h + r); sh.quadraticCurveTo(-h, -h, -h + r, -h);
+    }
+    const UVGenerator = {
+      generateTopUV: (g, v, a, b, c) => [a, b, c].map(i => new T.Vector2(v[i * 3] / s + 0.5, v[i * 3 + 1] / s + 0.5)),
+      generateSideWallUV: () => [new T.Vector2(0, 0), new T.Vector2(1, 0), new T.Vector2(1, 1), new T.Vector2(0, 1)],
+    };
+    const g = new T.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 2, curveSegments: round ? 20 : 4, UVGenerator });
+    g.rotateX(-Math.PI / 2);
+    g.translate(0, 0.03, 0); // bottom at y≈0.005, top face at TOP
+    return g;
+  }
 
   /* Bake every static mesh of a group into one geometry per material: hundreds of trees become a few draw calls. */
   function mergeStatic(group, parent, own) {
@@ -372,6 +393,8 @@
 
     render(track) {
       this.ensure();
+      // coming back from the flat board: put the canvas back into the stage
+      if (this.renderer.domElement.parentNode !== this.host) { this.host.innerHTML = ''; this.host.appendChild(this.renderer.domElement); }
       this.clearWorld();
       this.track = track;
       this.userMoved = false;
@@ -379,6 +402,11 @@
       const cells = track.cells;
       const pts = centerline(track);
       this.pts = pts;
+      // spots beside the road already taken by garages, signs and exit bridges
+      this.occupied = [];
+      for (const pit of track.pits) { const pc = track.cells[pit.cell]; this.occupied.push({ x: pc.x + pit.n[0] * 1.18, y: pc.y + pit.n[1] * 1.18, r: 0.7 }); }
+      for (const k in track.checks) { const ch = track.checks[k]; if (ch.sx !== undefined) this.occupied.push({ x: ch.sx, y: ch.sy, r: 0.3 }); }
+      for (const ec of track.cells) if (ec.type === 'exit') { const t = track.cells[ec.exitTo]; this.occupied.push({ x: (ec.x + t.x) / 2, y: (ec.y + t.y) / 2, r: 0.6 }); }
       const b = track.bbox, m = 1.3;
       this.bounds = { x0: b.x - m, x1: b.x + b.w + m, z0: b.y - m, z1: b.y + b.h + m };
       const B = this.bounds, W = B.x1 - B.x0, D = B.z1 - B.z0;
@@ -429,22 +457,22 @@
       }
 
       // tiles
-      const tileGeo = this.keep(new T.BoxGeometry(0.86, 0.045, 0.86));
-      const side = Mo.mat('#7c8189');
+      const tileGeo = this.keep(tileGeometry(false));
+      const side = Mo.mat('#d9dce1', { flatShading: false, roughness: 0.7 });
       const tileMats = new Map();
       const tileMat = key => {
-        if (!tileMats.has(key)) tileMats.set(key, [side, side, new T.MeshStandardMaterial({ map: tex('tile/' + key), roughness: 0.75 }), side, side, side]);
+        if (!tileMats.has(key)) tileMats.set(key, [new T.MeshStandardMaterial({ map: tex('tile/' + key), roughness: 0.7 }), side]);
         return tileMats.get(key);
       };
-      const roundGeo = this.keep(new T.CylinderGeometry(0.36, 0.36, 0.045, 24));
+      const roundGeo = this.keep(tileGeometry(true));
       const dashGeo = this.keep(new T.BoxGeometry(0.24, 0.012, 0.05));
       this.cellMeshes = [];
       for (const c of cells) {
         let node;
         if (c.kind === 'T') {
-          node = new T.Mesh(roundGeo, Mo.mat('#8e939a'));
+          node = new T.Mesh(roundGeo, [Mo.mat('#8e939a', { flatShading: false }), side]);
           const dash = new T.Mesh(dashGeo, Mo.mat('#f1f2f4'));
-          dash.position.y = 0.028;
+          dash.position.y = TOP + 0.004;
           dash.rotation.y = -c.ang;
           node.add(dash);
         } else {
@@ -452,8 +480,9 @@
           node = new T.Mesh(tileGeo, tileMat(key));
           node.rotation.y = c.type === 'exit' ? -((c.h + 1) % 2) * Math.PI / 2 : -(c.h % 2) * Math.PI / 2;
         }
-        node.position.set(c.x, 0.045, c.y);
+        node.position.set(c.x, 0, c.y);
         node.receiveShadow = true;
+        node.castShadow = true;
         node.userData = { cell: c.i, tip: { cell: c.i } };
         W0.add(node);
         this.pickables.push(node);
@@ -471,6 +500,13 @@
         banner.material = [new T.MeshStandardMaterial({ map: bt }), new T.MeshStandardMaterial({ map: bt }), banner.material, banner.material, banner.material, banner.material];
         a.traverse(o => { if (o.isMesh) o.castShadow = true; });
         W0.add(a);
+        const hh = headingOf(c), nx = -Math.sin(hh), ny = Math.cos(hh);
+        for (const sgn of [-1, 1]) {
+          const fl = Mo.flag(c.type === 'finish');
+          fl.position.set(c.x + nx * sgn * 0.78 - Math.cos(hh) * 0.3, 0, c.y + ny * sgn * 0.78 - Math.sin(hh) * 0.3);
+          fl.rotation.y = -hh + Math.PI / 2;
+          this.statics.add(fl);
+        }
       }
 
       // checks: red bars on joints, signs on posts, turn wedges with difficulty
@@ -485,7 +521,7 @@
           wg.userData = { tip: { check: chk.b } };
           this.pickables.push(wg);
           const num = textSprite(String(chk.diff), { color: '#6ff0ff', scale: 0.34 });
-          num.position.set(C.x + Math.cos(am) * 1.72, 0.3, C.y + Math.sin(am) * 1.72);
+          num.position.set(C.x + Math.cos(am) * 1.72, 0.52, C.y + Math.sin(am) * 1.72);
           W0.add(num);
           continue;
         }
@@ -495,16 +531,38 @@
         bar.position.set(chk.bx, 0.03, chk.by);
         bar.rotation.y = -h;
         this.statics.add(bar);
-        const post = Mo.signPost(0.48);
-        post.position.set(chk.sx, 0, chk.sy);
-        this.statics.add(post);
+        const face = Math.atan2(-chk.n[0], -chk.n[1]); // turn the object towards the road
+        let obj, label = 0.66, size = 0.42;
+        if (chk.type === 'cam_max' || chk.type === 'cam_min') { obj = Mo.speedCamera(chk.type === 'cam_max' ? '#2fe6ff' : '#ff3b3b'); label = 0.98; size = 0.3; }
+        else if (chk.type === 'police') { obj = Mo.policeBooth(); obj.scale.setScalar(0.85); label = 0.82; size = 0.3; }
+        else if (chk.type === 'customs') { obj = Mo.boomBarrier(); label = 0.66; size = 0.3; }
+        else obj = Mo.signPost(0.48);
+        obj.position.set(chk.sx, 0, chk.sy);
+        obj.rotation.y = face;
+        obj.traverse(o => { if (o.isMesh) { o.userData = { tip: { check: chk.b } }; } });
+        this.statics.add(obj);
         const sp = new T.Sprite(new T.SpriteMaterial({ map: tex('sign/' + def.img) }));
-        sp.scale.set(0.42, 0.38, 1);
-        sp.position.set(chk.sx, 0.66, chk.sy);
+        sp.scale.set(size, size * 0.9, 1);
+        sp.position.set(chk.sx, label, chk.sy);
         sp.userData = { tip: { check: chk.b } };
         W0.add(sp);
         this.pickables.push(sp);
       }
+
+      // red-and-white kerbs along both edges of every turn
+      track.pieces.forEach(pc => {
+        if (pc.piece.t === 'S') return;
+        const g = pc.g, sweep = pc.piece.t === 'T90' ? Math.PI / 2 : Math.PI;
+        for (const rr of [0.47, 1.53]) {
+          const n = Math.max(4, Math.round(sweep * rr / 0.11));
+          for (let k = 0; k < n; k++) {
+            const a = g.a0 + g.turn * sweep * (k + 0.5) / n;
+            const kb = Mo.box(0.1, 0.035, 0.06, k % 2 ? '#ffffff' : '#e8262f', 0, 0, 0, this.statics);
+            kb.position.set(g.C.x + Math.cos(a) * rr, 0.03, g.C.y + Math.sin(a) * rr);
+            kb.rotation.y = -(a + g.turn * Math.PI / 2);
+          }
+        }
+      });
 
       // СТО garages with a driveway
       for (const pit of track.pits) {
@@ -532,18 +590,56 @@
       return this.renderer.domElement;
     }
 
+    /* a free spot right beside the road next to cell c (or null when lanes run too close) */
+    roadside(c, avoid) {
+      const h = headingOf(c), nx = -Math.sin(h), ny = Math.cos(h);
+      for (const sgn of [1, -1]) {
+        if (avoid && avoid[0] === nx * sgn && avoid[1] === ny * sgn) continue;
+        const x = c.x + nx * sgn * 0.84, y = c.y + ny * sgn * 0.84;
+        let ok = this.occupied.every(o => (o.x - x) ** 2 + (o.y - y) ** 2 > (o.r + 0.3) ** 2);
+        for (let i = 0; ok && i < this.pts.length; i += 2) {
+          const p = this.pts[i];
+          if (Math.abs(p.l - c.l) > 1.2 && (p.x - x) ** 2 + (p.y - y) ** 2 < 0.78 * 0.78) ok = false;
+        }
+        if (ok) { this.occupied.push({ x, y, r: 0.3 }); return { x, y, face: Math.atan2(-nx * sgn, -ny * sgn), h }; }
+      }
+      return null;
+    }
     addProp(c, rand) {
       const W0 = this.world;
       const h = headingOf(c);
-      const side = (rand() < 0.5 ? -1 : 1) * 0.3;
+      const side = (rand() < 0.5 ? -1 : 1) * 0.28;
       const sx = -Math.sin(h) * side, sy = Math.cos(h) * side;
+      const put = (o, x, y, rot) => { o.position.set(x, 0, y); o.rotation.y = rot; o.traverse(m => { if (m.isMesh) m.castShadow = true; }); this.statics.add(o); };
       let p = null;
       switch (c.type) {
-        case 'car': p = Mo.parkedCar(); p.scale.setScalar(0.8); p.position.set(c.x + sx, 0.07, c.y + sy); p.rotation.y = -h + (rand() - 0.5) * 0.4; break;
-        case 'box': p = Mo.crate(); p.scale.setScalar(0.7); p.position.set(c.x + sx, 0.07, c.y + sy); p.rotation.y = rand() * 2; break;
-        case 'nitro': p = Mo.chevrons('#7bf07a'); p.position.set(c.x, 0.04, c.y); p.rotation.y = -h; break;
-        case 'tp': p = Mo.portal({ pink: '#ff4fd8', orange: '#ff8a1f', cyan: '#2fe6ff' }[c.color]); p.position.set(c.x, 0.05, c.y); p.rotation.y = -h + Math.PI / 2; break;
-        case 'chase': p = Mo.siren(); p.position.set(c.x + sx * 1.25, 0.06, c.y + sy * 1.25); break;
+        case 'car': p = Mo.parkedCar(); p.scale.setScalar(0.72); p.position.set(c.x + sx, TOP, c.y + sy); p.rotation.y = -h + (rand() - 0.5) * 0.4; break;
+        case 'box': p = Mo.crateStack(rand); p.scale.setScalar(0.62); p.position.set(c.x + sx, TOP, c.y + sy); p.rotation.y = rand() * 2; break;
+        case 'nitro': {
+          p = Mo.chevrons('#7bf07a'); p.position.set(c.x, TOP, c.y); p.rotation.y = -h;
+          const s = this.roadside(c); if (s) put(Mo.nosTank(), s.x, s.y, s.face + Math.PI / 2);
+          break;
+        }
+        case 'tp': p = Mo.portal({ pink: '#ff4fd8', orange: '#ff8a1f', cyan: '#2fe6ff' }[c.color]); p.position.set(c.x, TOP - 0.02, c.y); p.rotation.y = -h + Math.PI / 2; break;
+        case 'chase': {
+          const s = this.roadside(c);
+          if (s) {
+            const pc = Mo.policeCar();
+            for (const part of [pc.body, pc.lights]) { part.scale.setScalar(0.85); part.position.set(s.x, 0, s.y); part.rotation.y = -s.h; }
+            put(pc.body, s.x, s.y, -s.h);
+            pc.lights.traverse(m => { if (m.isMesh) m.castShadow = true; });
+            W0.add(pc.lights);
+            this.anim.push(pc.lights);
+          } else { p = Mo.siren(); p.position.set(c.x + sx * 1.25, TOP, c.y + sy * 1.25); }
+          break;
+        }
+        case 'crossing': { const s = this.roadside(c); if (s) put(Mo.crossingSign(), s.x, s.y, s.face); break; }
+        case 'exit': { const s = this.roadside(c, c.exitN); if (s) put(Mo.uturnSign(), s.x, s.y, s.face); break; }
+        case 'noparking': {
+          if (c.i !== c.npStart) break;
+          const s = this.roadside(c); if (s) put(Mo.roundSign('#2f5cff', '#e8262f', '#e8262f'), s.x, s.y, s.face);
+          break;
+        }
       }
       if (!p) return;
       p.traverse(o => { if (o.isMesh) o.castShadow = true; });
@@ -557,11 +653,8 @@
         for (let i = 0; i < pts.length; i += 2) { const p = pts[i]; if ((p.x - x) ** 2 + (p.y - z) ** 2 < r * r) return true; }
         return false;
       };
-      const taken = [];
+      const taken = this.occupied.map(o => ({ x: o.x, z: o.y, r: o.r }));
       const free = (x, z, r) => taken.every(t => (t.x - x) ** 2 + (t.z - z) ** 2 > (t.r + r) ** 2);
-      for (const pit of this.track.pits) { const c = this.track.cells[pit.cell]; taken.push({ x: c.x + pit.n[0] * 1.18, z: c.y + pit.n[1] * 1.18, r: 0.7 }); }
-      for (const k in this.track.checks) { const ch = this.track.checks[k]; if (ch.sx !== undefined) taken.push({ x: ch.sx, z: ch.sy, r: 0.3 }); }
-      for (const c of this.track.cells) if (c.type === 'exit') { const t = this.track.cells[c.exitTo]; taken.push({ x: (c.x + t.x) / 2, z: (c.y + t.y) / 2, r: 0.6 }); }
       for (let x = B.x0 + 0.35; x < B.x1 - 0.3; x += 0.55) {
         for (let z = B.z0 + 0.35; z < B.z1 - 0.3; z += 0.55) {
           const jx = x + (rand() - 0.5) * 0.4, jz = z + (rand() - 0.5) * 0.4;
@@ -582,7 +675,7 @@
         for (const da of [-0.32, 0, 0.32]) {
           const a = ch.am + da, x = ch.C.x + Math.cos(a) * 1.68, z = ch.C.y + Math.sin(a) * 1.68;
           if (x < B.x0 + 0.2 || x > B.x1 - 0.2 || z < B.z0 + 0.2 || z > B.z1 - 0.2 || near(x, z, 0.62) || !free(x, z, 0.08)) continue;
-          const cn = Mo.cone();
+          const cn = da === 0 ? Mo.tireStack(rand) : Mo.cone();
           cn.position.set(x, 0, z);
           this.statics.add(cn);
         }
@@ -615,7 +708,7 @@
         const flag = Mo.box(0.1, 0.06, 0.008, p.color, -0.19, 0.5, 0.1, veh, { emissive: p.color, emissiveIntensity: 0.25 });
         flag.castShadow = false;
         const ring = new T.Mesh(this.keep(new T.RingGeometry(0.34, 0.42, 32).rotateX(-Math.PI / 2)), new T.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0, depthWrite: false }));
-        ring.position.y = 0.075;
+        ring.position.y = 0.012;
         group.add(ring);
         const badge = this.badge(p);
         badge.position.y = 0.82;
@@ -657,7 +750,7 @@
         const pit = this.track.pits.find(pt => pt.cell === p.pos);
         if (pit) {
           const c = this.track.cells[pit.cell];
-          return { x: c.x + pit.n[0] * 0.74, y: c.y + pit.n[1] * 0.74, h: Math.atan2(pit.n[1], pit.n[0]), key: 'pit' + pit.id };
+          return { x: c.x + pit.n[0] * 0.74, y: c.y + pit.n[1] * 0.74, h: Math.atan2(pit.n[1], pit.n[0]), key: 'pit' + pit.id, pit: true };
         }
       }
       const i = Math.max(0, Math.min(this.track.cells.length - 1, p._disp !== undefined ? p._disp : p.pos));
@@ -686,7 +779,7 @@
           const tk = this.tokens.get(p.id);
           if (!tk) return;
           const [f, sd] = lay[k] || [0, 0];
-          tk.target.set(s.x + fx * f - fy * sd, 0.07, s.y + fy * f + fx * sd);
+          tk.target.set(s.x + fx * f - fy * sd, s.pit ? 0.03 : TOP, s.y + fy * f + fx * sd);
           tk.targetRot = -s.h;
           tk.ts = sc;
           if (instant) { tk.pos.copy(tk.target); tk.rot = tk.targetRot; tk.s = sc; }
@@ -715,7 +808,7 @@
         const c = this.track.cells[i];
         if (!c) continue;
         const ring = new T.Mesh(g, new T.MeshBasicMaterial({ color: hover ? '#ffffff' : '#ffb82e', transparent: true, opacity: 0.95, depthWrite: false }));
-        ring.position.set(c.x, 0.085, c.y);
+        ring.position.set(c.x, TOP + 0.012, c.y);
         ring.userData.hover = hover;
         this.hl.add(ring);
         if (!hover) this.hlCells.add(i);
@@ -764,7 +857,7 @@
       for (const r of this.hl.children) r.material.opacity = r.userData.hover ? 1 : 0.6 + Math.sin(tnow * 6) * 0.35;
       for (const p of this.anim) {
         if (p.userData.spin) p.userData.spin[0].rotation.z += dt * 1.6;
-        if (p.userData.bob) p.position.y = 0.04 + Math.sin(tnow * 3) * 0.03;
+        if (p.userData.bob) p.position.y = TOP + Math.sin(tnow * 3) * 0.03;
         if (p.userData.blink) { const on = Math.floor(tnow * 3) % 2; p.userData.blink[0].material.emissiveIntensity = on ? 2 : 0.2; p.userData.blink[1].material.emissiveIntensity = on ? 0.2 : 2; }
       }
       this.fx = this.fx.filter(f => {

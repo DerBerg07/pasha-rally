@@ -76,6 +76,8 @@ kbd { font: 700 10px/1 var(--f-mono); padding: 3px 5px; border-radius: 5px; bord
 .seg button:disabled, .slot-racer:disabled { opacity: .55; cursor: not-allowed; }
 .lang-seg { background: var(--paper); box-shadow: var(--shadow-sm); }
 .lang-seg button { letter-spacing: .06em; }
+.view-seg { background: var(--paper); box-shadow: var(--shadow-sm); }
+.view-seg button { font-family: var(--f-mono); font-weight: 800; letter-spacing: .04em; }
 .count-pill { font: 700 12px/1 var(--f-mono); padding: 5px 9px; border-radius: 999px; background: var(--ink); color: var(--paper); }
 
 /* ---------- wordmark ---------- */
@@ -391,7 +393,7 @@ button.card { cursor: pointer; }
 .tt-text { margin-top: 3px; line-height: 1.35; font-weight: 500; }
 
 /* 2D board fallback (no WebGL) */
-.board-svg { width: 100%; height: 100%; display: block; background: #6f9f52; }
+.board-svg { width: 100%; height: 100%; display: block; background: transparent; overflow: visible; }
 .turn-num { font: 400 32px/1 var(--f-display); fill: #6ff0ff; stroke: #1a1d20; stroke-width: 7px; paint-order: stroke; text-anchor: middle; pointer-events: none; }
 .token { transition: transform .22s cubic-bezier(.3, .7, .3, 1); }
 .token.no-anim { transition: none; }
@@ -421,7 +423,7 @@ button.card { cursor: pointer; }
   .hud-top { flex-direction: column; align-items: stretch; gap: 8px; top: 8px; left: 8px; right: 8px; }
   .hud-left .wordmark { display: none; }
   .hud-tools { justify-content: flex-start; gap: 6px; }
-  .hud-tools #btn-speed, .hud-tools .lang-seg, .hud-tools #btn-rules-game { display: none; }
+  .hud-tools #btn-speed, .hud-tools .lang-seg, .hud-tools #btn-rules-game, #cam-in, #cam-out { display: none; }
   .cam-tools .icon-btn { width: 34px; height: 34px; }
   .hand-cards .card .card-text { min-height: 40px; }
   .log-wrap { top: auto; bottom: calc(var(--sheet, 300px) + 10px); left: 8px; width: auto; right: 8px; }
@@ -454,7 +456,10 @@ button.card { cursor: pointer; }
   .played .card.mini { display: none; }
   .hand-cards .card:hover { transform: translateY(-4px); }
   .played { right: auto; left: 8px; top: 156px; padding: 6px 10px 6px 6px; }
-  .dice-tray { top: 150px; }
+  .dice-tray { top: 150px; padding: 8px 10px; gap: 10px; }
+  .dice-tray .die { width: 34px; height: 34px; padding: 5px; }
+  .dice-tray .die i { width: 6px; height: 6px; }
+  .tray-speed b { font-size: 26px; }
   .m-body { grid-template-columns: minmax(0, 1fr); }
   .m-card { display: flex; justify-content: center; }
   .m-card .card { width: 130px; }

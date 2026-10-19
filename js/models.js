@@ -333,5 +333,126 @@
     return g;
   }
 
-  AR.Models = { vehicle, head, parkedCar, crate, portal, chevrons, siren, tree, bush, rock, cone: cone3d, garage, arch, signPost, mat, box, cyl };
+  /* ---------- roadside objects that give each tile and check its own volume ---------- */
+  function policeCar() {
+    const body = new T.Group(), lights = new T.Group();
+    box(0.46, 0.09, 0.24, '#f4f6f8', 0, 0.09, 0, body);
+    box(0.16, 0.091, 0.242, '#1d2230', 0.17, 0.09, 0, body);
+    box(0.12, 0.091, 0.242, '#1d2230', -0.19, 0.09, 0, body);
+    box(0.24, 0.08, 0.22, '#f4f6f8', -0.02, 0.17, 0, body);
+    box(0.25, 0.06, 0.225, '#9fd3f2', -0.02, 0.165, 0, body, { transparent: true, opacity: 0.55 });
+    for (const [x, z] of [[0.15, -0.12], [0.15, 0.12], [-0.15, -0.12], [-0.15, 0.12]]) wheel(0.05, 0.04, x, z, body);
+    box(0.1, 0.025, 0.2, '#222', -0.02, 0.222, 0, lights);
+    const r = box(0.05, 0.04, 0.08, '#ff3b3b', -0.02, 0.25, -0.05, lights, { emissive: '#ff2020', emissiveIntensity: 1.6 });
+    const b = box(0.05, 0.04, 0.08, '#3b6bff', -0.02, 0.25, 0.05, lights, { emissive: '#2050ff', emissiveIntensity: 1.6 });
+    lights.userData.blink = [r, b];
+    return { body, lights };
+  }
+  function crateStack(rand) {
+    const g = new T.Group();
+    box(0.36, 0.04, 0.36, '#a8865a', 0, 0.02, 0, g); // pallet
+    for (const x of [-0.12, 0, 0.12]) box(0.04, 0.03, 0.36, '#7c5c36', x, 0.055, 0, g);
+    const a = crate(); a.scale.setScalar(0.85); a.position.set(-0.04, 0.07, 0.02); g.add(a);
+    const b = crate(); b.scale.setScalar(0.62); b.position.set(0.02, 0.33, -0.02); b.rotation.y = 0.4 + rand() * 0.4; g.add(b);
+    return g;
+  }
+  function nosTank() {
+    const g = new T.Group();
+    const c = cyl(0.07, 0.07, 0.34, '#2f5cff', 0, 0.075, 0, g, 14, { metalness: 0.35, roughness: 0.35 });
+    c.rotation.z = Math.PI / 2;
+    const cap = cyl(0.045, 0.06, 0.05, '#cfd3da', 0.19, 0.075, 0, g, 12, { metalness: 0.6, roughness: 0.3 });
+    cap.rotation.z = Math.PI / 2;
+    const band = cyl(0.072, 0.072, 0.06, '#f2f4f7', -0.04, 0.075, 0, g, 14);
+    band.rotation.z = Math.PI / 2;
+    return g;
+  }
+  function plateSign(w, h, color, border) {
+    const g = new T.Group();
+    box(w + 0.03, h + 0.03, 0.02, border, 0, 0, 0, g);
+    box(w, h, 0.024, color, 0, 0, 0, g);
+    return g;
+  }
+  function crossingSign() {
+    const g = signPost(0.42);
+    const plate = plateSign(0.2, 0.2, '#2f5cff', '#f2f4f7');
+    plate.position.y = 0.48;
+    g.add(plate);
+    const tri = new T.Shape([new T.Vector2(-0.075, -0.06), new T.Vector2(0.075, -0.06), new T.Vector2(0, 0.075)]);
+    mesh(geo('tri', () => new T.ExtrudeGeometry(tri, { depth: 0.012, bevelEnabled: false })), mat('#ffffff'), 0, 0.475, 0.012, g);
+    box(0.02, 0.06, 0.01, '#111', 0, 0.465, 0.028, g);
+    sphere(0.013, '#111', 0, 0.505, 0.028, g);
+    return g;
+  }
+  function roundSign(face, ring, slash) {
+    const g = signPost(0.42);
+    const disc = mesh(geo('rdisc', () => new T.CylinderGeometry(0.11, 0.11, 0.02, 24).rotateX(Math.PI / 2)), mat(ring), 0, 0.5, 0, g);
+    disc.castShadow = true;
+    mesh(geo('rdisc2', () => new T.CylinderGeometry(0.08, 0.08, 0.024, 24).rotateX(Math.PI / 2)), mat(face), 0, 0.5, 0, g);
+    if (slash) { const s = box(0.17, 0.024, 0.028, slash, 0, 0.5, 0, g); s.rotation.z = -0.8; }
+    return g;
+  }
+  function uturnSign() {
+    const g = signPost(0.42);
+    const d = box(0.17, 0.17, 0.02, '#f2c21b', 0, 0.5, 0, g);
+    d.rotation.z = Math.PI / 4;
+    const e = box(0.19, 0.19, 0.016, '#1b1e25', 0, 0.5, -0.004, g);
+    e.rotation.z = Math.PI / 4;
+    const arc = mesh(geo('uarc', () => new T.TorusGeometry(0.035, 0.011, 6, 12, Math.PI)), mat('#1b1e25'), 0, 0.52, 0.014, g);
+    arc.castShadow = false;
+    box(0.022, 0.06, 0.01, '#1b1e25', 0.035, 0.49, 0.014, g);
+    box(0.022, 0.06, 0.01, '#1b1e25', -0.035, 0.49, 0.014, g);
+    return g;
+  }
+  function speedCamera(numColor) {
+    const g = signPost(0.56);
+    box(0.06, 0.03, 0.12, '#8f959c', 0, 0.56, 0.04, g);
+    box(0.11, 0.1, 0.18, '#2a2e36', 0, 0.62, 0.08, g);
+    const lens = cyl(0.03, 0.034, 0.04, '#111', 0, 0.62, 0.18, g, 12, { metalness: 0.4 });
+    lens.rotation.x = Math.PI / 2;
+    sphere(0.016, numColor, 0, 0.62, 0.2, g, { emissive: numColor, emissiveIntensity: 1.2 });
+    return g;
+  }
+  function policeBooth() {
+    const g = new T.Group();
+    box(0.34, 0.34, 0.3, '#2f5cff', 0, 0.17, 0, g);
+    box(0.36, 0.06, 0.32, '#f2f4f7', 0, 0.37, 0, g);
+    box(0.2, 0.12, 0.012, '#bfe3ff', 0, 0.22, 0.151, g, { transparent: true, opacity: 0.8 });
+    box(0.36, 0.03, 0.32, '#1d2230', 0, 0.415, 0, g);
+    const light = sphere(0.045, '#4f7bff', 0, 0.46, 0, g, { emissive: '#2050ff', emissiveIntensity: 1.4 });
+    light.castShadow = false;
+    return g;
+  }
+  function boomBarrier() {
+    const g = new T.Group();
+    box(0.12, 0.26, 0.12, '#e8e9ec', 0, 0.13, 0, g);
+    box(0.13, 0.04, 0.13, '#e8262f', 0, 0.2, 0, g);
+    const arm = new T.Group();
+    for (let k = 0; k < 6; k++) box(0.1, 0.035, 0.035, k % 2 ? '#e8262f' : '#ffffff', 0.05 + k * 0.1, 0, 0, arm);
+    arm.position.set(0.05, 0.24, 0.07);
+    arm.rotation.z = 0.5; // raised: the road stays open
+    g.add(arm);
+    return g;
+  }
+  function tireStack(rand) {
+    const g = new T.Group();
+    const n = 2 + Math.floor(rand() * 2);
+    for (let k = 0; k < n; k++) {
+      const t = mesh(geo('tire', () => new T.TorusGeometry(0.075, 0.035, 8, 14).rotateX(Math.PI / 2)), mat(k % 2 ? '#e8262f' : '#1c1d21'), 0, 0.035 + k * 0.065, 0, g);
+      t.castShadow = true;
+    }
+    return g;
+  }
+  function flag(checkered) {
+    const g = new T.Group();
+    cyl(0.012, 0.012, 0.7, '#c9ccd2', 0, 0.35, 0, g, 6, { metalness: 0.4 });
+    const cloth = new T.Group();
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) box(0.05, 0.05, 0.008, (i + j) % 2 && checkered ? '#111' : (checkered ? '#fff' : '#ff5b1f'), 0.025 + i * 0.05, 0.6 - j * 0.05, 0, cloth);
+    g.add(cloth);
+    return g;
+  }
+
+  AR.Models = {
+    vehicle, head, parkedCar, crate, portal, chevrons, siren, tree, bush, rock, cone: cone3d, garage, arch, signPost, mat, box, cyl,
+    policeCar, crateStack, nosTank, crossingSign, roundSign, uturnSign, speedCamera, policeBooth, boomBarrier, tireStack, flag,
+  };
 })();

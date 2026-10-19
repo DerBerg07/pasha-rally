@@ -18,6 +18,9 @@
     logEntries: [], net: null, nextResolve: null,
   };
   const fmt = m => AR.fmt(m, S.game);
+  const HAS3D = !!AR.Board3D;
+  const BOARDS = { '2d': AR.Board2D || AR.Board, '3d': AR.Board3D };
+  const view = () => (S.setup && S.setup.view === '3d' && HAS3D ? '3d' : '2d');
   const nm = obj => AR.tx(obj, 'name');
 
   /* ---------- small helpers ---------- */
@@ -84,14 +87,14 @@
     const ids = AR.util.shuffle(AR.RACERS.map(r => r.id));
     return {
       players: ['human', 'bot', 'bot', 'bot'].map((kind, i) => ({ name: defaultName(kind, i + 1), kind, racer: ids[i] })),
-      active: 0, size: 'medium', seed: randSeed(), speed: 'normal', handoff: true, confirmBots: false,
+      active: 0, size: 'medium', seed: randSeed(), speed: 'normal', handoff: true, confirmBots: false, view: HAS3D ? '3d' : '2d',
     };
   }
   function saveSetup() {
     const s = S.setup;
     store({
       players: s.players.filter(p => p.kind !== 'remote').map(p => ({ name: p.name, kind: p.kind, racer: p.racer })),
-      size: s.size, speed: s.speed, handoff: s.handoff, confirmBots: s.confirmBots,
+      size: s.size, speed: s.speed, handoff: s.handoff, confirmBots: s.confirmBots, view: s.view,
     });
     broadcastLobby();
   }
@@ -157,7 +160,10 @@
     S.preview.setInsets({ top: 70, left: col.right + 10, right: 18, bottom: innerHeight - bar.top + 10 });
   }
   function renderPreview(tr) {
-    if (!S.preview) S.preview = new AR.Board($('#track-preview'), { interactive: true, preview: true });
+    S.previews = S.previews || {};
+    const v = view();
+    if (!S.previews[v]) S.previews[v] = new BOARDS[v]($('#track-preview'), { interactive: true, preview: true });
+    S.preview = S.previews[v];
     previewInsets();
     S.preview.render(tr);
     trackStats(tr);
@@ -263,6 +269,8 @@
     document.addEventListener('click', e => {
       const b = e.target.closest('.lang-seg button[data-lang]');
       if (b) setLanguage(b.dataset.lang);
+      const v = e.target.closest('.view-seg button[data-view]');
+      if (v && !v.disabled) setView(v.dataset.view);
     });
   }
   function selectCode() {
@@ -290,14 +298,41 @@
       if (SPEEDS[saved.speed]) S.setup.speed = saved.speed;
       S.setup.handoff = saved.handoff !== false;
       S.setup.confirmBots = !!saved.confirmBots;
+      if (saved.view === '2d' || (saved.view === '3d' && HAS3D)) S.setup.view = saved.view;
     }
     $('#opt-speed').value = S.setup.speed;
     $('#opt-handoff').checked = S.setup.handoff;
     $('#opt-confirm').checked = S.setup.confirmBots;
     renderSlots();
+    updateViewSeg();
     newTrack(true);
     renderNet();
     bindMenu();
+  }
+
+  /* ---------- 2D / 3D board ---------- */
+  function updateViewSeg() {
+    $$('.view-seg button[data-view]').forEach(b => {
+      const on = b.dataset.view === view();
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+      b.disabled = b.dataset.view === '3d' && !HAS3D;
+    });
+  }
+  function setView(v) {
+    if (v === view() || (v === '3d' && !HAS3D)) return;
+    S.setup.view = v;
+    saveSetup();
+    updateViewSeg();
+    if (S.track && !$('#menu').hidden) renderPreview(S.track);
+    if (S.game && S.track) {
+      setupBoard(S.track);
+      S.board.setPlayers(S.game.players);
+      S.board.setCurrent(S.game.players[S.game.current].id);
+      if (S.board.centerOn) S.board.centerOn(S.game.players[S.game.current]);
+      if (S.hl) S.board.highlight(S.hl);
+      refresh();
+    }
   }
 
   /* ================= ONLINE LOBBY ================= */
@@ -521,10 +556,13 @@
     S.game = null;
   }
   function setupBoard(track) {
-    if (!S.board) {
-      S.board = new AR.Board($('#board'), { interactive: true, follow: true });
-      S.board.onFollowChange = followBtn;
+    S.boards = S.boards || {};
+    const v = view();
+    if (!S.boards[v]) {
+      S.boards[v] = new BOARDS[v]($('#board'), { interactive: true, follow: true });
+      S.boards[v].onFollowChange = followBtn;
     }
+    S.board = S.boards[v];
     S.board.render(track);
     S.board.onPick = pick => { if (S.onBoardPick) S.onBoardPick(pick); };
     requestAnimationFrame(gameInsets);
@@ -541,7 +579,7 @@
       S.board.setInsets({ top: strip.bottom + 6, bottom: innerHeight - bottom.top + 6, left: 6, right: 6 });
     } else {
       const right = $('#hud-right').getBoundingClientRect();
-      S.board.setInsets({ top: 64, right: innerWidth - right.left + 10, bottom: innerHeight - bottom.top + 6, left: 14 });
+      S.board.setInsets({ top: 108, right: innerWidth - right.left + 10, bottom: innerHeight - bottom.top + 6, left: 14 });
     }
   }
   function followBtn() {
@@ -550,7 +588,7 @@
     const on = !!(S.board && S.board.follow);
     b.textContent = t('camFollow');
     b.setAttribute('aria-pressed', on);
-    $('.cam-tools').hidden = !(S.board && S.board.setInsets);
+    $('.cam-tools').hidden = !(S.board && S.board.rotate);
   }
 
   function startGame() {
@@ -901,6 +939,7 @@
     m.className = 'modal';
     if (root !== '#modal') return;
     S.onBoardPick = null;
+    S.hl = null;
     if (S.board) S.board.clearHighlight();
   }
   function collapseModal() { $('#modal').classList.add('collapsed'); }
@@ -959,6 +998,7 @@
     const cells = opts.filter(o => o.cell !== undefined && !o.disabled).map(o => o.cell);
     const players = opts.filter(o => o.player !== undefined && !o.disabled).map(o => o.player);
     S.board.highlight({ cells, players });
+    S.hl = { cells, players };
     S.onBoardPick = pick => {
       const o = opts.find(o => !o.disabled && ((pick.cell !== undefined && o.cell === pick.cell) || (pick.player !== undefined && o.player === pick.player)));
       if (o) done(o.value);
