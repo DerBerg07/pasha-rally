@@ -12,6 +12,8 @@
     return 1.6 + Math.max(0, starsAfter - 2) * 1.0;
   }
   function wantsPit(p, hp) { return hp <= Math.max(1, Math.floor(p.maxHp / 2)); }
+  /* Wolf: dropping the stars is worth the rest of the move only when there are plenty of them */
+  function wantsWolfPit(p, stars, left) { return p.racer === 'wolf' && (stars >= 5 || (stars >= 3 && left <= stars - 1)); }
 
   /* Value of ending a move on tile `pos` (relative to the player's current spot). */
   function tileValue(G, p, pos, hp = p.hp, stars = p.stars, depth = 0) {
@@ -43,9 +45,10 @@
         const chk = T.checks[pos];
         if (chk && skipAt !== pos) {
           if (chk.type === 'turn90' || chk.type === 'turn180') {
+            const n = chk.type === 'turn180' && p.racer === 'cheetah' ? 2 : 1;
             if (tSh) { tSh--; cSh--; }
-            else if (speed >= chk.diff) { extra -= hpCost(G, p, hp - 1, pos); hp--; }
-          } else if ((chk.type === 'cam_max' && speed >= 7) || (chk.type === 'cam_min' && speed <= 4)) {
+            else if (speed >= chk.diff) { extra -= hpCost(G, p, hp - n, pos) * (n > 1 ? 1.4 : 1); hp -= n; }
+          } else if ((chk.type === 'cam_max' && speed >= 7) || (chk.type === 'cam_min' && speed <= 4 && p.racer !== 'turtle')) {
             if (cSh) { cSh--; tSh--; } else { extra -= starCost(G, p, stars + 1, pos); stars++; }
           } else if (chk.type === 'customs' && stars) {
             extra -= Math.min(stars, p.hand.length) * 0.9;
@@ -62,7 +65,7 @@
         }
         pos++;
         if (pos >= T.finish) return 1000;
-        if (T.cells[pos].pit !== undefined && hp < p.maxHp && wantsPit(p, hp)) return (pos - p.pos) + extra + 2.5;
+        if (T.cells[pos].pit !== undefined && ((hp < p.maxHp && wantsPit(p, hp)) || wantsWolfPit(p, stars, speed - s - 1))) return (pos - p.pos) + extra + 2.5;
       }
       return tileValue(G, p, pos, hp, stars) + extra;
     };
@@ -75,7 +78,7 @@
     const loop = (k, sum) => {
       if (k === n) {
         let s = sum;
-        if (p.racer === 'turtle') s = Math.max(1, s - 2);
+        if (p.racer === 'turtle' && n === 2) s = Math.max(1, s - 2);
         total += evalSpeed(G, p, s);
         count++;
         return;
@@ -95,11 +98,13 @@
     }
     return best;
   }
-  /* Best Hare jump right now, or null when it is not worth one of the three jumps. */
+  /* Best Hare jump right now, or null when it is not worth the race's only jump. */
   function planJump(G, p, moved) {
     if (!G.canJump(p)) return null;
-    let bestK = null, bestV = moved ? 1.8 : 3;
-    for (const k of [2, 1, -1, -2]) {
+    const left = G.track.finish - p.pos;
+    if (left <= 3) return left; // straight over the finish line
+    let bestK = null, bestV = moved ? 4.5 : 5.5;
+    for (const k of [3, 2, 1, -1, -2, -3]) {
       const t = p.pos + k;
       if (t < 0 || t > G.track.finish) continue;
       const v = tileValue(G, p, t);
@@ -256,10 +261,9 @@
           return req.what === 'turn' ? (p.hp <= 2 || many) : (p.stars >= 2 || many);
         }
         case 'hare': return has(p._hare) ? p._hare : (enabled[0] ? enabled[0].value : null);
-        case 'pit': return wantsPit(p, p.hp);
-        case 'ram': {
-          const q = G.players[req.target];
-          return (q.hp <= 1 && p.hp >= 2) || (p.hp > q.hp && p.hp >= 3);
+        case 'pit': {
+          if (has('clear') && (wantsWolfPit(p, p.stars, req.left) || wantsPit(p, p.hp))) return 'clear';
+          return has(true) && wantsPit(p, p.hp);
         }
         case 'pick': {
           if (plan && plan.pick && req.cards.some(c => c.uid === plan.pick)) return [plan.pick];

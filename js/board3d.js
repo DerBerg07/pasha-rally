@@ -209,7 +209,10 @@
       if (!this.renderer) return;
       const { w, h } = this.size();
       this.renderer.setSize(w, h, false);
-      if (this.track && !this.userMoved) this.fit(true);
+      if (!this.track || this.userMoved) return;
+      const zoom = this.follow ? this.want.half / this.fitHalf : 0;
+      this.fit(true);
+      if (zoom) this.cam.half = this.want.half = this.fitHalf * zoom;
     }
     setInsets(ins) {
       this.insets = Object.assign({ top: 0, right: 0, bottom: 0, left: 0 }, ins);
@@ -270,7 +273,8 @@
       if (instant) { this.cam.base.copy(base); this.cam.half = this.want.half; this.cam.yaw = this.want.yaw; }
     }
     rotate(dir) { this.want.yaw += dir * Math.PI / 2; }
-    zoom(f) { this.want.half = Math.min(this.fitHalf * 1.6, Math.max(this.fitHalf / 6, this.want.half / f)); this.userMoved = true; }
+    /* zooming keeps the follow camera on its car; only a free camera remembers that the user moved it */
+    zoom(f) { this.want.half = Math.min(this.fitHalf * 1.6, Math.max(this.fitHalf / 6, this.want.half / f)); if (!this.follow) this.userMoved = true; }
     setFollow(on) {
       this.follow = on;
       this.userMoved = false;
@@ -298,7 +302,7 @@
           const [a, b] = [...pts.values()];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
           this.want.half = Math.min(this.fitHalf * 1.6, Math.max(this.fitHalf / 6, pinch.half * pinch.d / Math.max(20, d)));
-          this.userMoved = true;
+          if (!this.follow) this.userMoved = true;
           return;
         }
         if (drag) {

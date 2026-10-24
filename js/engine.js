@@ -22,7 +22,7 @@
           pos: 0, hp: r.hp, maxHp: r.hp, stars: 0, hand: [], inPit: false,
           triggered: new Set(), flags: {}, epoch: 0,
           stats: { deaths: 0, arrests: 0, cards: 0 },
-          jumps: pc.racer === 'hare' ? 3 : 0,
+          jumps: pc.racer === 'hare' ? 1 : 0,
         };
       });
       this.deck = [];
@@ -56,7 +56,7 @@
       let res;
       if (p.bot) {
         res = AR.AI.decide(this, p, req);
-        if (req.kind !== 'pit' && req.kind !== 'ram') await this.sleep(250);
+        if (req.kind !== 'pit') await this.sleep(250);
       } else {
         res = await this.ui.ask(p, req);
       }
@@ -171,7 +171,6 @@
           return;
         }
       }
-      const deathPos = p.pos;
       const pit = this.pitBehind(p.pos);
       p.epoch++;
       this.ui.warp(p, true);
@@ -185,12 +184,16 @@
       this.refresh();
       await this.sleep(260);
       for (const v of this.players) {
-        if (v === p || v.racer !== 'vulture' || Math.abs(v.pos - deathPos) > 5) continue;
+        if (v === p || v.racer !== 'vulture' || v.flags.vultureUsed) continue;
+        v.flags.vultureUsed = true;
         this.log(M('vultureFeed', P(v)), v);
         await this.draw(v, 1);
-        this.heal(v, 1);
+        if (this.over) return;
       }
-      if (by && by !== p) await this.addStars(by, 1, { reason: M('rsnKilled', P(p)) });
+      if (by && by !== p) {
+        if (by.racer === 'viper') { this.log(M('viperDraw', P(by)), by); await this.draw(by, 1); }
+        else await this.addStars(by, 1, { reason: M('rsnKilled', P(p)) });
+      }
       this.refresh();
     }
 
@@ -289,7 +292,7 @@
 
     speedOf(p, dice, mod) {
       let base = dice.reduce((s, v) => s + v, 0);
-      if (p.racer === 'turtle') base = Math.max(1, base - 2);
+      if (p.racer === 'turtle' && dice.length === 2) base = Math.max(1, base - 2);
       return Math.max(0, base + mod);
     }
 
@@ -349,10 +352,10 @@
       await this.ui.dice(p, dice, 0, 'speed', this.speedOf(p, dice, 0));
       const mod = await this.handbrakeWindow(p, dice);
       const speed = this.speedOf(p, dice, mod);
-      this.log(M('roll', P(p), dice.join(' + '), p.racer === 'turtle', mod, speed), p);
+      this.log(M('roll', P(p), dice.join(' + '), p.racer === 'turtle' && dice.length === 2, mod, speed), p);
       if (speed === 0) { this.log(M('standStill', P(p)), p); return; }
       const ep = p.epoch;
-      const passed = new Set();
+      const passed = new Set(), rammed = new Set();
       let s = 0;
       if (p.inPit) { // driving out of the pit onto the track is the first step of the move
         p.inPit = false;
@@ -380,28 +383,28 @@
         await this.ui.step(p);
         if (await this.checkFinish(p)) return;
         const last = s === speed - 1;
-        if (!last && p.racer === 'rhino') {
-          for (const q of this.players.filter(q => q !== p && !q.inPit && q.pos === p.pos)) {
-            const yes = await this.ask(p, {
-              kind: 'ram', target: q.id, title: M('askRamTitle'), text: M('askRam', P(q), q.hp),
-              options: [{ value: true, label: M('optRam') }, { value: false, label: M('optDriveBy') }],
-            });
-            if (!yes) continue;
+        if (!last && p.racer === 'rhino' && speed >= 8) { // Rhino: at speed 8+ everyone driven past loses 1 HP
+          for (const q of this.players.filter(q => q !== p && !q.inPit && q.pos === p.pos && !rammed.has(q))) {
+            rammed.add(q);
             this.log(M('ram', P(p), P(q)), p);
             await this.damage(q, 1, { by: p, reason: M('rsnRam') });
-            await this.damage(p, 1, { reason: M('rsnRamSelf') });
             if (this.over || p.epoch !== ep) return;
           }
         }
         const c = this.cell(p.pos);
-        if (c.pit !== undefined && p.hp < p.maxHp) {
+        const wolf = p.racer === 'wolf' && p.stars > 0;
+        if (c.pit !== undefined && (p.hp < p.maxHp || wolf)) {
+          const options = [];
+          if (wolf) options.push({ value: 'clear', label: M('optPitClear', p.stars) });
+          if (p.hp < p.maxHp) options.push({ value: true, label: M('optPitIn') });
+          options.push({ value: false, label: M('optDriveOn') });
           const yes = await this.ask(p, {
-            kind: 'pit', title: M('pitName'), text: M('askPit', p.maxHp),
-            options: [{ value: true, label: M('optPitIn') }, { value: false, label: M('optDriveOn') }],
+            kind: 'pit', title: M('pitName'), text: M(p.hp < p.maxHp ? 'askPit' : 'askPitWolf', p.maxHp, p.stars), options, left: speed - s - 1,
           });
           if (yes) {
             p.inPit = true;
             this.log(M('pitIn', P(p)), p);
+            if (yes === 'clear') { this.log(M('wolfClear', P(p), p.stars), p); this.removeStars(p, p.stars); }
             this.ui.place(p);
             this.refresh();
             return;
@@ -418,11 +421,11 @@
         case 'turn180':
           if (speed < chk.diff) return;
           if (await this.offerSkid(p, 'turn')) return;
-          await this.damage(p, 1, { reason: M('rsnTurn', speed, chk.diff) });
+          await this.damage(p, chk.type === 'turn180' && p.racer === 'cheetah' ? 2 : 1, { reason: M('rsnTurn', speed, chk.diff) });
           return;
         case 'cam_max':
         case 'cam_min': {
-          const hit = chk.type === 'cam_max' ? speed >= 7 : speed <= 4;
+          const hit = chk.type === 'cam_max' ? speed >= 7 : speed <= 4 && p.racer !== 'turtle';
           if (!hit) return;
           if (await this.offerSkid(p, 'cam')) return;
           await this.addStars(p, 1, { field: true, reason: M(chk.type === 'cam_max' ? 'rsnCamFast' : 'rsnCamSlow') });
@@ -451,7 +454,7 @@
     /* ---------- turn ---------- */
     async turn(p) {
       this.turnNo++;
-      for (const q of this.players) { q.triggered.clear(); q.flags.foxUsed = false; }
+      for (const q of this.players) { q.triggered.clear(); q.flags.foxUsed = q.flags.vultureUsed = false; }
       p.flags = { cardsPlayed: 0 };
       this.current = p.id;
       await this.ui.turnStart(p);
@@ -512,21 +515,21 @@
     abort() { this.dead = true; }
 
     /* ---------- abilities ---------- */
-    /* Hare: three jumps per race, at most one per turn, on top of the normal move. */
+    /* Hare: one jump per race, 1–3 tiles either way, on top of the normal move. */
     canJump(p) { return p.racer === 'hare' && p.jumps > 0 && !p.flags.jumped; }
     async hareJump(p) {
       if (!this.canJump(p)) return false;
       const options = [];
-      for (const k of [2, 1, -1, -2]) {
+      for (const k of [3, 2, 1, -1, -2, -3]) {
         const t = p.pos + k;
         if (t < 0 || t > this.track.finish) continue;
         options.push({ value: k, cell: t, label: M(k > 0 ? 'optForward' : 'optBack', Math.abs(k)), sub: M('optTileSub', t, T(t)) });
       }
-      const k = await this.ask(p, { kind: 'hare', title: M('askHareTitle'), text: M('askHare', p.jumps), options, cancel: M('optCancel') });
+      const k = await this.ask(p, { kind: 'hare', title: M('askHareTitle'), text: M('askHare'), options, cancel: M('optCancel') });
       if (!k) return false;
       p.jumps--;
       p.flags.jumped = true;
-      this.log(M('hareJump', P(p), k, p.jumps), p);
+      this.log(M('hareJump', P(p), k), p);
       await this.moveBy(p, k);
       if (!this.over) await this.land(p);
       return true;

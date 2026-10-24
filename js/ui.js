@@ -190,6 +190,11 @@
       }
       const s = S.setup;
       s.active = i;
+      if (!act) { // a click into the name field only selects the slot: re-rendering would steal the focus
+        $$('.slot').forEach(x => x.classList.toggle('active', x === li));
+        renderGallery();
+        return;
+      }
       const p = s.players[i];
       if ((act === 'human' || act === 'bot') && p.kind !== act) {
         if (DEFAULT_NAME.test(p.name)) p.name = defaultName(act, i + 1);

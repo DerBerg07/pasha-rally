@@ -212,7 +212,7 @@
       }
     });
 
-    // two-tile straight blocks: teleport pairs 3–7 blocks apart, then the printed special tiles
+    // two-tile straight blocks: teleport pairs 2–5 blocks apart, then the printed special tiles
     const b2 = blocks.map((b, k) => ({ b, k })).filter(o => o.b.kind === 'B2');
     const colors = ['pink', 'orange', 'cyan'].slice(0, tpPairs);
     const used = new Set();
@@ -220,7 +220,7 @@
     for (const color of colors) {
       for (let tries = 0; tries < 120; tries++) {
         const a = b2[Math.floor(rand() * b2.length)];
-        const partners = b2.filter(o => o.k - a.k >= 3 && o.k - a.k <= 7 && !used.has(o.k));
+        const partners = b2.filter(o => o.k - a.k >= 2 && o.k - a.k <= 5 && !used.has(o.k));
         if (used.has(a.k) || !partners.length) continue;
         const b = partners[Math.floor(rand() * partners.length)];
         const ca = a.b.first + flip(), cb = b.b.first + flip();
@@ -306,8 +306,8 @@
       let ok = false;
       for (const b1 of shuffle(rand, signCands.slice())) {
         if (ok) break;
-        if (b1 < 5 || !farFromChecks(b1, 3) || zones.some(zz => b1 > zz.b1 - 14 && b1 < zz.b2 + 4)) continue;
-        for (const b2j of shuffle(rand, signCands.filter(x => x - b1 >= 5 && x - b1 <= 10))) {
+        if (b1 < 5 || !farFromChecks(b1, 3) || zones.some(zz => b1 > zz.b1 - 19 && b1 < zz.b2 + 4)) continue;
+        for (const b2j of shuffle(rand, signCands.filter(x => x - b1 >= 8 && x - b1 <= 15))) {
           if (!farFromChecks(b2j, 3)) continue;
           if (!placeSign('no_overtake', b1)) break;
           if (!placeSign('no_overtake_end', b2j)) { delete checks[b1]; decor.pop(); continue; }
@@ -317,18 +317,23 @@
         }
       }
     }
-    const queue = [];
-    for (const t of ['police', 'customs', 'cam_max', 'cam_min']) for (let k = 0; k < want[t]; k++) queue.push(t);
-    shuffle(rand, queue);
-    const seg = (N - 4) / Math.max(1, queue.length);
-    queue.forEach((type, k) => {
-      const lo = 2 + Math.floor(seg * k), hi = 2 + Math.floor(seg * (k + 1));
-      const pool = shuffle(rand, signCands.filter(b => b >= lo && b < hi)).concat(shuffle(rand, signCands.slice()));
-      for (const b of pool) {
-        if (!farFromChecks(b, 3) || checks[b]) continue;
-        if (placeSign(type, b)) break;
-      }
-    });
+    // spread the signs evenly from `from` to the finish; police and customs only stand in the second half
+    function spread(types, from) {
+      const queue = [];
+      for (const t of types) for (let k = 0; k < want[t]; k++) queue.push(t);
+      shuffle(rand, queue);
+      const seg = (N - 2 - from) / Math.max(1, queue.length);
+      queue.forEach((type, k) => {
+        const lo = from + Math.floor(seg * k), hi = from + Math.floor(seg * (k + 1));
+        const pool = shuffle(rand, signCands.filter(b => b >= lo && b < hi)).concat(shuffle(rand, signCands.filter(b => b >= from)));
+        for (const b of pool) {
+          if (!farFromChecks(b, 3) || checks[b]) continue;
+          if (placeSign(type, b)) break;
+        }
+      });
+    }
+    spread(['police', 'customs'], Math.ceil(N / 2));
+    spread(['cam_max', 'cam_min'], 2);
 
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const grow = (x, y, r) => { x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r); x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r); };

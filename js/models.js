@@ -114,6 +114,25 @@
         box(0.02, 0.012, 0.12, '#3a2a1c', 0.035, 0.026, 0, g);
         break;
       }
+      case 'viper': {
+        const s = sphere(0.052, '#5f9a3c', 0, 0, 0, g);
+        s.scale.set(1.45, 0.8, 1);
+        eye(0.054, -0.028); eye(0.054, 0.028);
+        for (const z of [-0.028, 0.028]) sphere(0.016, '#f2d64b', 0.045, 0.018, z, g);
+        cyl(0.075, 0.075, 0.012, '#17181c', -0.005, 0.04, 0, g, 14); // fedora brim
+        cyl(0.045, 0.052, 0.05, '#17181c', -0.005, 0.068, 0, g, 12);
+        cyl(0.053, 0.053, 0.012, '#7a2a2a', -0.005, 0.05, 0, g, 12);
+        break;
+      }
+      case 'wolf': {
+        sphere(0.064, '#8a939e', 0, 0, 0, g);
+        cone(0.032, 0.075, '#e9e6e0', 0.065, -0.015, 0, g).rotation.z = -1.57;
+        sphere(0.012, '#111', 0.1, -0.012, 0, g);
+        for (const z of [-0.036, 0.036]) cone(0.024, 0.07, '#6b7480', -0.015, 0.08, z, g, 4);
+        for (const z of [-0.024, 0.024]) cyl(0.017, 0.017, 0.02, '#f2c94c', 0.05, 0.03, z, g, 10).rotation.z = Math.PI / 2;
+        box(0.02, 0.01, 0.13, '#181b23', 0.035, 0.03, 0, g);
+        break;
+      }
       default:
         sphere(0.06, '#bbb', 0, 0, 0, g);
     }
@@ -228,6 +247,30 @@
           w.rotation.set(z * 4, 0, 0.3);
         }
         const h = add(head('eagle')); h.position.set(-0.04, 0.43, 0);
+        break;
+      }
+      case 'viper': { // black lowrider sedan
+        box(0.64, 0.1, 0.3, '#1b1d20', 0, 0.1, 0, g, { metalness: 0.35, roughness: 0.35 });
+        box(0.34, 0.1, 0.27, '#1b1d20', -0.04, 0.2, 0, g, { metalness: 0.35, roughness: 0.35 });
+        box(0.35, 0.065, 0.275, '#2c3a4a', -0.04, 0.2, 0, g, { transparent: true, opacity: 0.75 });
+        box(0.66, 0.012, 0.012, '#c9ccd2', 0, 0.12, -0.152, g, { metalness: 0.6 });
+        box(0.66, 0.012, 0.012, '#c9ccd2', 0, 0.12, 0.152, g, { metalness: 0.6 });
+        box(0.02, 0.05, 0.28, '#c9ccd2', 0.325, 0.09, 0, g, { metalness: 0.6, roughness: 0.3 }); // chrome grille
+        for (const z of [-0.1, 0.1]) sphere(0.022, '#fff6d8', 0.33, 0.11, z, g, { emissive: '#665c33' });
+        for (const [x, z] of [[0.2, -0.15], [0.2, 0.15], [-0.2, -0.15], [-0.2, 0.15]]) wheel(0.065, 0.05, x, z, g, '#16171a');
+        const h = add(head('viper')); h.position.set(0.01, 0.3, -0.06);
+        break;
+      }
+      case 'wolf': { // grey muscle car with a bonnet scoop
+        box(0.62, 0.11, 0.31, '#56677d', 0, 0.12, 0, g);
+        box(0.24, 0.08, 0.28, '#56677d', -0.1, 0.21, 0, g);
+        box(0.25, 0.055, 0.285, '#bfe3ff', -0.1, 0.21, 0, g, { transparent: true, opacity: 0.6 });
+        box(0.12, 0.035, 0.08, '#2a2f38', 0.16, 0.19, 0, g); // scoop
+        for (const z of [-0.05, 0.05]) box(0.62, 0.003, 0.03, '#e9e6e0', 0, 0.177, z, g);
+        box(0.04, 0.02, 0.32, '#2a2f38', -0.31, 0.2, 0, g); // spoiler
+        for (const z of [-0.12, 0.12]) box(0.03, 0.04, 0.02, '#2a2f38', -0.3, 0.18, z, g);
+        for (const [x, z, r] of [[0.2, -0.16, 0.07], [0.2, 0.16, 0.07], [-0.19, -0.16, 0.085], [-0.19, 0.16, 0.085]]) wheel(r, 0.075, x, z, g);
+        const h = add(head('wolf')); h.position.set(-0.06, 0.33, -0.06);
         break;
       }
       default:
