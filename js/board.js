@@ -51,7 +51,10 @@
     render(track) {
       this.track = track;
       this.host.innerHTML = '';
-      const m = 0.7, b = track.bbox;
+      const m = 0.7, b0 = track.bbox;
+      // a very short track (the builder's first blocks) keeps a sensible scale
+      const bw0 = Math.max(b0.w, 9), bh0 = Math.max(b0.h, 6);
+      const b = { x: b0.x - (bw0 - b0.w) / 2, y: b0.y - (bh0 - b0.h) / 2, w: bw0, h: bh0 };
       const svg = el('svg', {
         viewBox: `${(b.x - m) * S} ${(b.y - m) * S} ${(b.w + 2 * m) * S} ${(b.h + 2 * m) * S}`,
         preserveAspectRatio: 'xMidYMid meet', class: 'board-svg', role: 'img',

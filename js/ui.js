@@ -76,6 +76,7 @@
     applyI18n();
     renderSlots();
     if (S.track) trackStats(S.track);
+    if (S.build && builderOpen()) renderBuildPanel();
     renderNet();
     updateSpeedBtn();
     followBtn();
@@ -94,7 +95,7 @@
     const s = S.setup;
     store({
       players: s.players.filter(p => p.kind !== 'remote').map(p => ({ name: p.name, kind: p.kind, racer: p.racer })),
-      size: s.size, speed: s.speed, handoff: s.handoff, confirmBots: s.confirmBots, view: s.view,
+      size: s.size, speed: s.speed, handoff: s.handoff, confirmBots: s.confirmBots, view: s.view, design: s.design || null,
     });
     broadcastLobby();
   }
@@ -131,7 +132,7 @@
     const humans = list.filter(p => p.kind === 'human').length;
     $('#opt-handoff').disabled = client || humans < 2;
     $('#opt-handoff-wrap').classList.toggle('muted', humans < 2);
-    $$('#size-seg button, #btn-reroll, #opt-speed, #opt-confirm').forEach(b => { b.disabled = client; });
+    $$('#size-seg button, #btn-reroll, #btn-build, #opt-speed, #opt-confirm').forEach(b => { b.disabled = client; });
     $('#btn-start').hidden = client;
     $('#client-wait').hidden = !client;
     renderGallery();
@@ -148,7 +149,7 @@
   function trackStats(tr) {
     const turns = Object.values(tr.checks).filter(c => c.type.startsWith('turn')).length;
     const signs = Object.values(tr.checks).length - turns;
-    $('#seed-label').textContent = `№ ${tr.seed}`;
+    $('#seed-label').textContent = tr.design ? t('customTrack') : `№ ${tr.seed}`;
     $('#track-stats').textContent = t('trackStats', tr.blocks.length, tr.cells.length, turns, signs, tr.pits.length);
   }
   /* the menu diorama sits behind the panels: tell the camera which part of the screen is free */
@@ -171,8 +172,8 @@
   }
   function newTrack(keepSeed) {
     const s = S.setup;
-    if (!keepSeed) s.seed = randSeed();
-    S.track = AR.Track.generate(s.seed, s.size);
+    if (!keepSeed) { s.seed = randSeed(); s.design = null; }
+    S.track = s.design ? AR.Track.build(s.design) : AR.Track.generate(s.seed, s.size);
     renderPreview(S.track);
     broadcastLobby();
   }
@@ -304,6 +305,7 @@
       S.setup.handoff = saved.handoff !== false;
       S.setup.confirmBots = !!saved.confirmBots;
       if (saved.view === '2d' || (saved.view === '3d' && HAS3D)) S.setup.view = saved.view;
+      if (saved.design && typeof saved.design.code === 'string' && AR.Track.build(saved.design).complete) S.setup.design = saved.design;
     }
     $('#opt-speed').value = S.setup.speed;
     $('#opt-handoff').checked = S.setup.handoff;
@@ -313,6 +315,7 @@
     newTrack(true);
     renderNet();
     bindMenu();
+    bindBuilder();
   }
 
   /* ---------- 2D / 3D board ---------- */
@@ -330,6 +333,7 @@
     saveSetup();
     updateViewSeg();
     if (S.track && !$('#menu').hidden) renderPreview(S.track);
+    if (S.build && builderOpen()) renderBuilder();
     if (S.game && S.track) {
       setupBoard(S.track);
       S.board.setPlayers(S.game.players);
@@ -338,6 +342,207 @@
       if (S.hl) S.board.highlight(S.hl);
       refresh();
     }
+  }
+
+  /* ================= TRACK BUILDER ================= */
+  /* The player lays the road block by block (as with the printed kit), then may place the special tiles by hand. */
+  const BLK_ICON = {
+    S: '<path d="M12 20V5M6.5 10.5 12 5l5.5 5.5"/>',
+    L: '<path d="M16 20v-5a6 6 0 0 0-6-6H5M8.5 5.5 5 9l3.5 3.5"/>',
+    R: '<path d="M8 20v-5a6 6 0 0 1 6-6h5M15.5 5.5 19 9l-3.5 3.5"/>',
+    U: '<path d="M16 20V10a4 4 0 0 0-8 0v6M4.5 12.5 8 16l3.5-3.5"/>',
+    V: '<path d="M8 20V10a4 4 0 0 1 8 0v6M12.5 12.5 16 16l3.5-3.5"/>',
+    N: '<circle cx="12" cy="12" r="8"/><path d="M6.4 6.4l11.2 11.2"/>',
+    X: '<path d="M7 20V4M17 20V4M7 12h10M13.5 8.5 17 12l-3.5 3.5"/>',
+    F: '<path d="M6 21V4h11l-2.5 4L17 12H6"/>',
+  };
+  const BLK_KEY = { S: '↑', L: '←', R: '→', U: 'Q', V: 'E', N: 'N', X: 'X', F: 'F' };
+  const KEY_BLK = { ArrowUp: 'S', KeyW: 'S', ArrowLeft: 'L', KeyA: 'L', ArrowRight: 'R', KeyD: 'R', KeyQ: 'U', KeyE: 'V', KeyN: 'N', KeyX: 'X', KeyF: 'F' };
+  const copyDesign = d => ({ code: d.code, seed: d.seed, tiles: d.tiles ? Object.assign({}, d.tiles) : null });
+  const builderOpen = () => !$('#builder').hidden;
+  const editableCells = tr => tr.cells.filter(c => tr.blocks[c.block].kind === 'B2').map(c => c.i);
+  /* the other tile of a two-tile straight block: a block carries one special tile */
+  const blockMate = (tr, i) => { const b = tr.blocks[tr.cells[i].block]; return i === b.first ? b.first + 1 : b.first; };
+
+  function openBuilder() {
+    if (isClient()) return;
+    const B = S.build = S.build || { boards: {} };
+    B.design = B.draft || (S.setup.design ? copyDesign(S.setup.design) : { code: '', seed: randSeed(), tiles: null });
+    B.sel = null;
+    B.msg = null;
+    B.shown = null;
+    $('#menu').hidden = true;
+    $('#builder').hidden = false;
+    renderBuilder();
+  }
+  function closeBuilder(apply) {
+    const B = S.build;
+    if (apply) {
+      if (!B.track.complete) return;
+      S.setup.design = copyDesign(B.design);
+      B.draft = null;
+      S.track = AR.Track.build(S.setup.design);
+      saveSetup();
+    } else B.draft = copyDesign(B.design); // a cancelled build waits for the next visit
+    $('#builder').hidden = true;
+    $('#tooltip').hidden = true;
+    $('#menu').hidden = false;
+    renderPreview(S.track);
+  }
+  function renderBuilder() {
+    const B = S.build;
+    B.track = AR.Track.build(B.design);
+    B.state = AR.Track.nextBlocks(B.design.code);
+    const v = view();
+    if (!B.boards[v]) B.boards[v] = new BOARDS[v]($('#builder-board'), { interactive: true });
+    B.board = B.boards[v];
+    B.board.onPick = pick => { if (pick.cell !== undefined) pickTile(pick.cell); };
+    renderBuildPanel();
+    builderInsets();
+    B.board.render(B.track, { smooth: B.shown === v });
+    B.shown = v;
+    highlightBuild();
+  }
+  function builderInsets() {
+    const B = S.build;
+    if (!B || !B.board || !B.board.setInsets || !builderOpen()) return;
+    const top = $('#builder .hud-top').getBoundingClientRect(), panel = $('#build-panel').getBoundingClientRect();
+    B.board.setInsets({ top: top.bottom + 8, bottom: innerHeight - panel.top + 8, left: 10, right: 10 });
+  }
+  function highlightBuild() {
+    const B = S.build, tr = B.track;
+    if (!tr.complete) { B.board.highlight({ cells: [tr.cells.length - 1] }); return; } // where the next block goes
+    B.board.highlight({ cells: editableCells(tr) });
+    if (B.sel !== null) B.board.highlight({ cells: [B.sel], hover: true });
+  }
+  function tileOptions(tr, tiles, i) {
+    const mate = blockMate(tr, i);
+    const used = v => Object.keys(tiles).filter(k => tiles[k] === v && +k !== i && +k !== mate).length;
+    const out = [{ v: 'plain', img: 'plain', label: nm(AR.TILES.plain), left: null }];
+    for (const type in AR.KIT.straight) out.push({ v: type, img: AR.TILES[type].img, label: nm(AR.TILES[type]), left: AR.KIT.straight[type] - used(type) });
+    for (const col of AR.Track.TP_COLORS) out.push({ v: 'tp:' + col, img: 'tp_' + col, label: t('tileTp', t('tpColor')[col]), left: 2 - used('tp:' + col) });
+    return out;
+  }
+  function renderBuildPanel() {
+    const B = S.build, st = B.state, tr = B.track;
+    $('#build-info').textContent = `${t('buildTitle')} · ${t('buildInfo', st.blocks, st.cells)}`;
+    const done = $('#build-done');
+    done.disabled = !tr.complete;
+    done.title = tr.complete ? '' : t('buildDoneWhy');
+    let html;
+    if (!tr.complete) {
+      const size = t('size' + S.setup.size[0].toUpperCase() + S.setup.size.slice(1));
+      html = `<p class="hint">${esc(t('buildHintRoad'))}</p>
+        <div class="palette">${Object.keys(BLK_ICON).map(c => {
+          const n = st.next[c];
+          return `<button type="button" class="blk ${c === 'F' ? 'fin' : ''}" data-blk="${c}" ${n.ok ? '' : 'aria-disabled="true"'} title="${esc(n.ok ? t('blk' + c) : whyBlock(n.why))}">
+            <svg viewBox="0 0 24 24" aria-hidden="true">${BLK_ICON[c]}</svg><span>${esc(t('blk' + c))}</span>
+            ${n.left !== null ? `<span class="blk-left">${esc(t('blkLeft', n.left))}</span>` : ''}<kbd>${BLK_KEY[c]}</kbd>
+          </button>`;
+        }).join('')}</div>
+        <div class="bp-actions">
+          <button type="button" class="btn small" data-bact="undo" ${st.blocks > 1 ? '' : 'disabled'}>${esc(t('buildUndo'))}</button>
+          <button type="button" class="btn small" data-bact="auto" title="${esc(t('buildAutoTip', size))}">${esc(t('buildAuto'))}</button>
+          <button type="button" class="btn small ghost" data-bact="clear" ${st.blocks > 1 ? '' : 'disabled'}>${esc(t('buildClear'))}</button>
+          <button type="button" class="btn small ghost" data-bact="menu">${esc(t('buildFromMenu'))}</button>
+        </div>`;
+    } else {
+      const tiles = B.design.tiles || AR.Track.tilesOf(tr);
+      let row = `<p class="hint">${esc(t('tilePick'))}</p>`;
+      if (B.sel !== null) {
+        const cur = tiles[B.sel] || 'plain';
+        row = `<div class="tile-row"><b>${esc(t('tileSel', B.sel))}</b>${tileOptions(tr, tiles, B.sel).map(o =>
+          `<button type="button" class="topt ${o.v === cur ? 'on' : ''}" data-tile="${o.v}" ${o.v === cur || o.left === null || o.left > 0 ? '' : 'disabled'}>
+            <img src="${AR.asset.tile(o.img)}" alt="">${esc(o.label)}${o.left !== null ? ` <small>${esc(t('tileLeft', o.left))}</small>` : ''}
+          </button>`).join('')}</div>`;
+      }
+      const lone = AR.Track.TP_COLORS.filter(c => Object.values(tiles).filter(v => v === 'tp:' + c).length === 1);
+      html = `<p class="hint">${esc(t('buildHintTiles'))} ${esc(t('tileOnePerBlock'))}</p>${row}
+        ${lone.length ? `<p class="bp-msg">${esc(t('tileLone', lone.map(c => t('tpColor')[c]).join(', ')))}</p>` : ''}
+        <div class="bp-actions">
+          <button type="button" class="btn small" data-bact="undo">${esc(t('buildUnfinish'))}</button>
+          <button type="button" class="btn small" data-bact="shuffle">${esc(t('tileShuffle'))}</button>
+          <button type="button" class="btn small ghost" data-bact="clearTiles">${esc(t('tileClearAll'))}</button>
+          <button type="button" class="btn small ghost" data-bact="reseed">${esc(t('tileReseed'))}</button>
+          <button type="button" class="btn small ghost" data-bact="clear">${esc(t('buildClear'))}</button>
+        </div>`;
+    }
+    if (B.msg) html += `<p class="bp-msg">${esc(B.msg)}</p>`;
+    $('#build-panel').innerHTML = html;
+  }
+  function whyBlock(why) {
+    return { kit: t('whyKit'), blocked: t('whyBlocked'), noExit: t('whyNoExit'), short: t('whyShort', S.build.state.min), done: t('whyDone') }[why] || '';
+  }
+  function addBlock(c) {
+    const B = S.build;
+    if (B.track.complete) return;
+    const n = B.state.next[c];
+    if (!n || !n.ok) { B.msg = n ? whyBlock(n.why) : null; renderBuildPanel(); return; }
+    B.design.code = B.state.code + c;
+    B.msg = null;
+    renderBuilder();
+  }
+  function undoBlock() {
+    const B = S.build, d = B.design;
+    if (!d.code) return;
+    d.code = B.state.code.slice(0, -1);
+    if (d.tiles) { // forget special tiles on the blocks that are gone
+      const cells = AR.Track.nextBlocks(d.code).cells;
+      for (const k of Object.keys(d.tiles)) if (+k >= cells) delete d.tiles[k];
+    }
+    B.sel = null;
+    B.msg = null;
+    renderBuilder();
+  }
+  function pickTile(i) {
+    const B = S.build;
+    if (!B.track.complete || !editableCells(B.track).includes(i)) return;
+    B.sel = i;
+    renderBuildPanel();
+    highlightBuild();
+  }
+  function setTile(v) {
+    const B = S.build, tr = B.track, i = B.sel;
+    const tiles = B.design.tiles = B.design.tiles || AR.Track.tilesOf(tr);
+    if (v === 'plain') delete tiles[i];
+    else { tiles[i] = v; delete tiles[blockMate(tr, i)]; }
+    renderBuilder();
+  }
+  function builderAction(a) {
+    const B = S.build, d = B.design;
+    B.msg = null;
+    if (a === 'undo') { undoBlock(); return; }
+    if (a === 'auto') {
+      const code = AR.Track.complete(B.state.code, randSeed(), S.setup.size);
+      if (code) d.code = code; else B.msg = t('buildAutoFail');
+    } else if (a === 'clear') { d.code = ''; d.tiles = null; }
+    else if (a === 'menu') B.design = copyDesign(AR.Track.designOf(S.track));
+    else if (a === 'shuffle') { d.tiles = null; d.seed = randSeed(); }
+    else if (a === 'clearTiles') d.tiles = {};
+    else if (a === 'reseed') { d.tiles = d.tiles || AR.Track.tilesOf(B.track); d.seed = randSeed(); }
+    B.sel = null;
+    renderBuilder();
+  }
+  function bindBuilder() {
+    $('#btn-build').addEventListener('click', openBuilder);
+    $('#build-cancel').addEventListener('click', () => closeBuilder(false));
+    $('#build-done').addEventListener('click', () => closeBuilder(true));
+    $('#build-panel').addEventListener('click', e => {
+      const blk = e.target.closest('[data-blk]');
+      if (blk) { addBlock(blk.dataset.blk); return; }
+      const act = e.target.closest('[data-bact]');
+      if (act && !act.disabled) { builderAction(act.dataset.bact); return; }
+      const tile = e.target.closest('[data-tile]');
+      if (tile && !tile.disabled) setTile(tile.dataset.tile);
+    });
+    document.addEventListener('keydown', e => {
+      if (!builderOpen() || e.altKey || e.metaKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+      if (e.key === 'Backspace' || (e.ctrlKey && e.code === 'KeyZ')) { e.preventDefault(); undoBlock(); return; }
+      if (e.key === 'Escape' && S.build.sel !== null) { S.build.sel = null; renderBuildPanel(); highlightBuild(); return; }
+      const c = !e.ctrlKey && KEY_BLK[e.code];
+      if (c) { e.preventDefault(); addBlock(c); }
+    });
+    window.addEventListener('resize', builderInsets);
   }
 
   /* ================= ONLINE LOBBY ================= */
@@ -384,7 +589,7 @@
   }
   function lobbyFor(peer) {
     const s = S.setup;
-    return { players: s.players.map(p => ({ name: p.name, kind: p.kind, racer: p.racer })), size: s.size, seed: s.seed, you: s.players.findIndex(p => p.peer === peer) };
+    return { players: s.players.map(p => ({ name: p.name, kind: p.kind, racer: p.racer })), size: s.size, seed: s.seed, design: s.design || null, you: s.players.findIndex(p => p.peer === peer) };
   }
   function broadcastLobby() {
     if (!isHost() || (S.game && !S.game.over && !S.game.dead)) return;
@@ -491,6 +696,7 @@
     renderNet();
     renderPreview(S.track);
   }
+  const trackFor = l => (l.design ? AR.Track.build(l.design) : AR.Track.generate(l.seed, l.size));
   function onClientMessage(msg) {
     const n = S.net;
     if (!n || n.role !== 'client' || !msg) return;
@@ -507,9 +713,10 @@
         return;
       }
       case 'lobby': {
-        const changed = !n.lobby || n.lobby.seed !== msg.lobby.seed || n.lobby.size !== msg.lobby.size;
+        const trackKey = l => JSON.stringify([l.seed, l.size, l.design || null]);
+        const changed = !n.lobby || trackKey(n.lobby) !== trackKey(msg.lobby);
         n.lobby = msg.lobby;
-        if (changed) { S.track = AR.Track.generate(msg.lobby.seed, msg.lobby.size); if (!S.game) renderPreview(S.track); }
+        if (changed) { S.track = trackFor(msg.lobby); if (!S.game) renderPreview(S.track); }
         if (!S.game) { renderSlots(); renderNet(); }
         return;
       }
@@ -617,7 +824,7 @@
     if (isHost()) {
       const base = {
         t: 'start', cells: S.track.cells.length,
-        cfg: { seed: S.track.seed, size: S.track.sizeKey, speed: cfg.speed, players: cfg.players.map(p => ({ name: p.name, racer: p.racer, bot: p.bot, remote: p.remote ? 'net' : null })) },
+        cfg: { seed: S.track.seed, size: S.track.sizeKey, design: S.track.design || null, speed: cfg.speed, players: cfg.players.map(p => ({ name: p.name, racer: p.racer, bot: p.bot, remote: p.remote ? 'net' : null })) },
       };
       s.players.forEach((p, i) => { if (p.kind === 'remote') S.net.host.sendTo(p.peer, Object.assign({}, base, { you: i })); });
     }
@@ -627,7 +834,7 @@
   function startClient(msg) {
     teardownGame();
     const cfg = msg.cfg;
-    S.track = AR.Track.generate(cfg.seed, cfg.size);
+    S.track = trackFor(cfg);
     if (S.track.cells.length !== msg.cells) {
       S.net.client.close();
       S.net = { role: 'error', error: t('netVersion') };

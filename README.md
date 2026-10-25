@@ -6,6 +6,10 @@
 
 Animal Rally — браузерна версія настільної гри-перегонів Паші для 2–6 гравців. Кожен керує гонщиком-твариною з власною здібністю, а трасу перед кожною партією складають з блоків набору, тож вона щоразу інша. Можна грати з ботами, удвох-ушістьох за одним пристроєм або по мережі.
 
+### Своя траса
+
+У блоці «Траса» натисни **«Зібрати самому»**. Додавай блоки з набору по одному: прямі, повороти, розвороти, «Без паркування», з'їзди. Коли поставиш фініш, можна клацати по тайлах прямих і самому розставити спецтайли й телепорти. Кнопка «Достроїти до фінішу» докладе решту траси за тебе. Знаки та СТО гра ставить сама. Зібрана траса зберігається, а в грі по мережі її отримують усі гравці.
+
 ### Як грати по мережі
 
 1. Господар відкриває гру за посиланням вище і в блоці «Гра по мережі» натискає **«Створити кімнату»**.
@@ -18,6 +22,10 @@ Animal Rally — браузерна версія настільної гри-п�
 ## English
 
 Animal Rally is a browser version of Pasha's racing board game for 2–6 players. Each player drives an animal racer with its own ability, and the track is rebuilt from the kit's blocks before every race, so no two races are the same. Play against bots, pass one device around, or play online.
+
+### Your own track
+
+Click **Build your own** in the Track panel. Add the kit's blocks one at a time: straights, turns, U-turns, No parking and exits. Once the finish is down, click straight tiles to place special tiles and teleports yourself; Finish it for me lays the rest of the road for you. Signs and pit stops are placed automatically. The track is saved, and in an online game every player gets it.
 
 ### Playing online
 

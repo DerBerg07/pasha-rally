@@ -69,24 +69,16 @@
   }
   const sum = o => Object.values(o).reduce((s, v) => s + v, 0);
 
-  /* ---------- geometry: a chain of blocks ---------- */
-  function tryGeometry(rand, size, W, H) {
-    const kit = AR.KIT;
-    const target = size.blocks;
-    const tpPairs = Math.min(kit.teleports, size.tp);
-    const maxB2 = sum(kit.straight) + tpPairs * 2;
-    const maxNP = Math.min(kit.noparking, size.np);
-    const maxEX = Math.min(kit.exits, size.exits);
-    const maxU = Math.min(kit.turn180, size.u180);
-    const samples = [], placed = [];
-    const straightAt = new Map();
-    const cnt = { B2: 0, NP: 0, EX: 0, T90: 0, T180: 0 };
-    let cellCount = 0;
-    let budget = 25000;
+  const TP_COLORS = ['pink', 'orange', 'cyan'];
 
-    function valid(g, L0) {
+  /* ---------- geometry: a chain of blocks ---------- */
+  /* Placed blocks with their centreline samples; checks that a new block keeps clear of the road so far. */
+  function makeChain(bounds) {
+    const ch = { bounds, samples: [], placed: [], straightAt: new Map(), cnt: { B2: 0, NP: 0, EX: 0, T90: 0, T180: 0 }, cells: 0 };
+    ch.valid = (g, L0) => {
+      const b = ch.bounds, samples = ch.samples;
       for (const s of g.samples) {
-        if (s.x < -1e-6 || s.x > W + 1e-6 || s.y < -1e-6 || s.y > H + 1e-6) return false;
+        if (s.x < b.x0 - 1e-6 || s.x > b.x1 + 1e-6 || s.y < b.y0 - 1e-6 || s.y > b.y1 + 1e-6) return false;
         const lim = L0 + s.l - 3.3;
         for (let i = 0; i < samples.length; i++) {
           const t = samples[i];
@@ -96,54 +88,70 @@
         }
       }
       return true;
-    }
-    function push(block, g, L) {
-      const rec = Object.assign({}, block, { g, L, firstCell: cellCount, mark: samples.length, keys: [] });
-      for (const s of g.samples) samples.push({ x: s.x, y: s.y, l: L + s.l });
+    };
+    ch.push = (block, g, L) => {
+      const rec = Object.assign({}, block, { g, L, firstCell: ch.cells, mark: ch.samples.length, keys: [] });
+      for (const s of g.samples) ch.samples.push({ x: s.x, y: s.y, l: L + s.l });
       g.cells.forEach((c, i) => {
         if (c.kind !== 'S') return;
         const k = key(c.x, c.y);
-        straightAt.set(k, cellCount + i);
+        ch.straightAt.set(k, ch.cells + i);
         rec.keys.push(k);
       });
-      cellCount += g.cells.length;
-      if (cnt[block.kind] !== undefined) cnt[block.kind]++;
-      placed.push(rec);
-    }
-    function pop() {
-      const rec = placed.pop();
-      samples.length = rec.mark;
-      rec.keys.forEach(k => straightAt.delete(k));
-      cellCount = rec.firstCell;
-      if (cnt[rec.kind] !== undefined) cnt[rec.kind]--;
-    }
+      ch.cells += g.cells.length;
+      if (ch.cnt[block.kind] !== undefined) ch.cnt[block.kind]++;
+      ch.placed.push(rec);
+    };
+    ch.pop = () => {
+      const rec = ch.placed.pop();
+      ch.samples.length = rec.mark;
+      rec.keys.forEach(k => ch.straightAt.delete(k));
+      ch.cells = rec.firstCell;
+      if (ch.cnt[rec.kind] !== undefined) ch.cnt[rec.kind]--;
+    };
     // З'їзд fits where an earlier lane runs right beside the road (2 units to the side)
-    function exitTarget(P, h) {
+    ch.exitTarget = (P, h) => {
       const d = DIRS[h];
       const cx = P.x + d[0] * 0.5, cy = P.y + d[1] * 0.5;
       for (const n of [DIRS[(h + 1) % 4], DIRS[(h + 3) % 4]]) {
-        const j = straightAt.get(key(cx + n[0] * 2, cy + n[1] * 2));
-        if (j !== undefined && j > 2 && cellCount - j >= 8 && cellCount - j <= 18) return { j, n };
+        const j = ch.straightAt.get(key(cx + n[0] * 2, cy + n[1] * 2));
+        if (j !== undefined && j > 2 && ch.cells - j >= 8 && ch.cells - j <= 18) return { j, n };
       }
       return null;
-    }
+    };
+    ch.end = () => { const pc = ch.placed[ch.placed.length - 1]; return { P: pc.g.end, h: pc.g.h, L: pc.L + pc.g.len }; };
+    return ch;
+  }
+  const START = { kind: 'START', piece: { t: 'S', n: 2 } };
+  const FIN = { kind: 'FIN', piece: { t: 'S', n: 2 } };
+
+  /* Random depth-first growth of the chain until FINISH is block number `target`. */
+  function extend(ch, rand, size, target) {
+    const kit = AR.KIT;
+    const tpPairs = Math.min(kit.teleports, size.tp);
+    const maxB2 = sum(kit.straight) + tpPairs * 2;
+    const maxNP = Math.min(kit.noparking, size.np);
+    const maxEX = Math.min(kit.exits, size.exits);
+    const maxU = Math.min(kit.turn180, size.u180);
+    const cnt = ch.cnt;
+    let budget = 25000;
     function rec(P, h, L, since, lastKind) {
       if (--budget < 0) return false;
-      if (placed.length === target - 1) {
-        const g = pieceGeom(P, h, { t: 'S', n: 2 });
-        if (!valid(g, L)) return false;
-        push({ kind: 'FIN', piece: { t: 'S', n: 2 } }, g, L);
+      if (ch.placed.length === target - 1) {
+        const g = pieceGeom(P, h, FIN.piece);
+        if (!ch.valid(g, L)) return false;
+        ch.push(FIN, g, L);
         return true;
       }
-      const n = placed.length;
+      const n = ch.placed.length;
       const opts = [];
       if (cnt.B2 < maxB2) opts.push({ w: 4, v: { kind: 'B2', piece: { t: 'S', n: 2 } } });
       if (cnt.NP < maxNP && lastKind !== 'NP' && n >= 3 && n < target - 3) opts.push({ w: 0.7, v: { kind: 'NP', piece: { t: 'S', n: 3 } } });
       if (cnt.EX < maxEX && n >= 5 && n < target - 2 && lastKind !== 'EX') {
-        const ex = exitTarget(P, h);
+        const ex = ch.exitTarget(P, h);
         if (ex) opts.push({ w: 3, v: { kind: 'EX', piece: { t: 'S', n: 1 }, exit: ex } });
       }
-      if (since >= 1 && cnt.T90 < AR.KIT.turn90) {
+      if (since >= 1 && cnt.T90 < kit.turn90) {
         opts.push({ w: 2.2, v: { kind: 'T90', piece: { t: 'T90', dir: 1 } } }, { w: 2.2, v: { kind: 'T90', piece: { t: 'T90', dir: -1 } } });
       }
       if (since >= 3 && n >= 4 && cnt.T180 < maxU) {
@@ -151,21 +159,28 @@
       }
       for (const v of weightedOrder(rand, opts)) {
         const g = pieceGeom(P, h, v.piece);
-        if (!valid(g, L)) continue;
-        push(v, g, L);
+        if (!ch.valid(g, L)) continue;
+        ch.push(v, g, L);
         const isS = v.piece.t === 'S';
         if (rec(g.end, g.h, L + g.len, isS ? since + v.piece.n : 0, v.kind)) return true;
-        pop();
+        ch.pop();
         if (budget < 0) return false;
       }
       return false;
     }
+    // straight tiles since the last turn, as the generator counts them
+    let since = 0;
+    for (let k = ch.placed.length - 1; k >= 0 && ch.placed[k].piece.t === 'S'; k--) since += ch.placed[k].piece.n;
+    const e = ch.end();
+    return rec(e.P, e.h, e.L, since, ch.placed[ch.placed.length - 1].kind);
+  }
 
+  function tryGeometry(rand, size, W, H) {
+    const ch = makeChain({ x0: 0, y0: 0, x1: W, y1: H });
     const P0 = { x: 0, y: rand() < 0.5 ? H - 1 : 1 };
-    const g0 = pieceGeom(P0, 0, { t: 'S', n: 2 });
-    push({ kind: 'START', piece: { t: 'S', n: 2 } }, g0, 0);
-    if (!rec(g0.end, 0, g0.len, 2, 'START')) return null;
-    return { placed, samples, tpPairs };
+    ch.push(START, pieceGeom(P0, 0, START.piece), 0);
+    if (!extend(ch, rand, size, size.blocks)) return null;
+    return { placed: ch.placed, samples: ch.samples, tpPairs: Math.min(AR.KIT.teleports, size.tp) };
   }
 
   function generate(seed, sizeKey) {
@@ -179,8 +194,11 @@
     throw new Error('track generation failed');
   }
 
-  /* ---------- block contents, checks on joints, СТО ---------- */
-  function decorate(seed, sizeKey, size, geo, rand) {
+  /* ---------- block contents, checks on joints, СТО ----------
+     opts.partial: a track still being built (no finish, specials, pit stops or signs yet);
+     opts.tiles: special tiles placed by hand in the builder instead of the kit's random draw. */
+  function decorate(seed, sizeKey, size, geo, rand, opts = {}) {
+    const full = !opts.partial;
     const { placed, samples, tpPairs } = geo;
     const kit = AR.KIT;
     const cells = [];
@@ -194,7 +212,7 @@
     });
     const N = cells.length, last = N - 1;
     cells[0].type = 'start';
-    cells[last].type = 'finish';
+    if (full) cells[last].type = 'finish';
     const decor = []; // occupied spots beside the road: {x, y, r}
     const sides = h => [DIRS[(h + 1) % 4], DIRS[(h + 3) % 4]];
     const roadClear = (x, y, lc, exclude, need) => samples.every(t => Math.abs(t.l - lc) <= exclude || Math.hypot(t.x - x, t.y - y) >= need);
@@ -214,7 +232,7 @@
 
     // two-tile straight blocks: teleport pairs 2–5 blocks apart, then the printed special tiles
     const b2 = blocks.map((b, k) => ({ b, k })).filter(o => o.b.kind === 'B2');
-    const colors = ['pink', 'orange', 'cyan'].slice(0, tpPairs);
+    const colors = full && !opts.tiles ? TP_COLORS.slice(0, tpPairs) : [];
     const used = new Set();
     const flip = () => (rand() < 0.5 ? 0 : 1);
     for (const color of colors) {
@@ -231,11 +249,26 @@
       }
     }
     const bag = [];
-    for (const [type, n] of Object.entries(kit.straight)) for (let k = 0; k < n; k++) bag.push(type);
+    if (full && !opts.tiles) for (const [type, n] of Object.entries(kit.straight)) for (let k = 0; k < n; k++) bag.push(type);
     shuffle(rand, bag);
     for (const o of b2) {
       if (used.has(o.k) || !bag.length) continue;
       cells[o.b.first + flip()].type = bag.pop();
+    }
+    if (full && opts.tiles) {
+      const tp = {};
+      for (const o of b2) for (const ci of [o.b.first, o.b.first + 1]) {
+        const v = opts.tiles[ci];
+        if (typeof v !== 'string') continue;
+        if (v.startsWith('tp:') && TP_COLORS.includes(v.slice(3))) (tp[v.slice(3)] = tp[v.slice(3)] || []).push(ci);
+        else if (kit.straight[v] !== undefined) cells[ci].type = v;
+      }
+      for (const color in tp) {
+        if (tp[color].length !== 2) continue; // a lone teleport stays a plain tile until it gets its pair
+        const [a, b] = tp[color];
+        Object.assign(cells[a], { type: 'tp', color, pair: b });
+        Object.assign(cells[b], { type: 'tp', color, pair: a });
+      }
     }
 
     const checks = {};
@@ -250,7 +283,7 @@
 
     // СТО: side pockets roughly every 8 blocks, on the plain tile of a road block
     const pits = [];
-    const nPits = Math.min(kit.pits, Math.max(1, Math.floor((blocks.length - 2) / 8)));
+    const nPits = full ? Math.min(kit.pits, Math.max(1, Math.floor((blocks.length - 2) / 8))) : 0;
     for (let t = 1; t <= nPits; t++) {
       const want = Math.round(t * blocks.length / (nPits + 1));
       const order = b2.slice().sort((x, y) => Math.abs(x.k - want) - Math.abs(y.k - want));
@@ -300,7 +333,7 @@
       return true;
     }
     const want = Object.assign({}, size.signs);
-    for (const k in want) want[k] = Math.min(want[k], kit.signs[k]);
+    for (const k in want) want[k] = full ? Math.min(want[k], kit.signs[k]) : 0;
     const zones = [];
     for (let z = 0; z < want.no_overtake; z++) {
       let ok = false;
@@ -365,5 +398,112 @@
     return d;
   }
 
-  AR.Track = { generate, pathD, DIRS, R };
+  /* ---------- hand-built tracks ----------
+     A design is { code, seed, tiles }: one letter per block after START (F = FINISH),
+     tiles = special tiles by cell index ('crossing', 'tp:pink', ...) or null to draw them from the kit. */
+  const BLOCKS = {
+    S: { kind: 'B2', piece: { t: 'S', n: 2 } },
+    N: { kind: 'NP', piece: { t: 'S', n: 3 } },
+    X: { kind: 'EX', piece: { t: 'S', n: 1 } },
+    L: { kind: 'T90', piece: { t: 'T90', dir: -1 } },
+    R: { kind: 'T90', piece: { t: 'T90', dir: 1 } },
+    U: { kind: 'T180', piece: { t: 'T180', dir: -1 } },
+    V: { kind: 'T180', piece: { t: 'T180', dir: 1 } },
+    F: FIN,
+  };
+  const OPEN = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
+  const MIN_BLOCKS = 12;
+  function kitLeft(cnt) {
+    const k = AR.KIT;
+    return { B2: sum(k.straight) + k.teleports * 2 - cnt.B2, NP: k.noparking - cnt.NP, EX: k.exits - cnt.EX, T90: k.turn90 - cnt.T90, T180: k.turn180 - cnt.T180 };
+  }
+  const letter = (kind, dir) => Object.keys(BLOCKS).find(c => BLOCKS[c].kind === kind && (BLOCKS[c].piece.dir || 0) === (dir || 0));
+  const codeOf = ch => ch.placed.slice(1).map(pc => letter(pc.kind, pc.piece.dir)).join('');
+  const finished = ch => ch.placed[ch.placed.length - 1].kind === 'FIN';
+  /* the block for letter c at the end of the chain, or why it does not fit */
+  function blockAt(ch, c) {
+    const def = BLOCKS[c];
+    if (finished(ch)) return { why: 'done' };
+    if (def.kind !== 'FIN' && kitLeft(ch.cnt)[def.kind] <= 0) return { why: 'kit' };
+    if (def.kind === 'FIN' && ch.placed.length < MIN_BLOCKS - 1) return { why: 'short' };
+    const e = ch.end();
+    let block = def;
+    if (def.kind === 'EX') {
+      const exit = ch.exitTarget(e.P, e.h);
+      if (!exit) return { why: 'noExit' };
+      block = Object.assign({ exit }, def);
+    }
+    const g = pieceGeom(e.P, e.h, def.piece);
+    if (!ch.valid(g, e.L)) return { why: 'blocked' };
+    return { block, g, L: e.L };
+  }
+  /* lay the design out from START; stops at the first block that does not fit */
+  function layout(code) {
+    const ch = makeChain(OPEN);
+    ch.push(START, pieceGeom({ x: 0, y: 0 }, 0, START.piece), 0);
+    for (const c of code || '') {
+      if (!BLOCKS[c]) break;
+      const r = blockAt(ch, c);
+      if (!r.block) break;
+      ch.push(r.block, r.g, r.L);
+    }
+    return ch;
+  }
+  /* state of the builder palette: which blocks fit next and how many the kit still has */
+  function nextBlocks(code) {
+    const ch = layout(code);
+    const left = kitLeft(ch.cnt);
+    const next = {};
+    for (const c of Object.keys(BLOCKS)) {
+      const r = blockAt(ch, c);
+      next[c] = { ok: !!r.block, why: r.why || null, left: c === 'F' ? null : left[BLOCKS[c].kind] };
+    }
+    return { code: codeOf(ch), blocks: ch.placed.length, cells: ch.cells, done: finished(ch), min: MIN_BLOCKS, next };
+  }
+  function build(design) {
+    const ch = layout(design.code);
+    const done = finished(ch);
+    const n = ch.placed.length;
+    const size = AR.TRACK_SIZES[n < 28 ? 'short' : n < 36 ? 'medium' : 'long'];
+    const seed = design.seed;
+    const tiles = design.tiles || null;
+    const geo = { placed: ch.placed, samples: ch.samples, tpPairs: Math.min(AR.KIT.teleports, size.tp) };
+    const tr = decorate(seed, 'custom', size, geo, makeRng(seed * 31 + 7), { partial: !done, tiles });
+    tr.design = { code: codeOf(ch), seed, tiles };
+    tr.complete = done;
+    return tr;
+  }
+  /* finish a hand-built start at random: the generator grows it to the size's length in a box around it */
+  function complete(code, seed, sizeKey) {
+    const size = AR.TRACK_SIZES[sizeKey] || AR.TRACK_SIZES.medium;
+    const base = layout(code);
+    if (finished(base)) return codeOf(base);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const t of base.samples) { x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x); y1 = Math.max(y1, t.y); }
+    for (let attempt = 0; attempt < 16; attempt++) {
+      const ch = layout(code);
+      const grow = Math.floor(attempt / 4) * 2;
+      const W = Math.max(size.W, x1 - x0 + 4) + grow, H = Math.max(size.H, y1 - y0 + 4) + grow;
+      ch.bounds = { x0: (x0 + x1 - W) / 2, x1: (x0 + x1 + W) / 2, y0: (y0 + y1 - H) / 2, y1: (y0 + y1 + H) / 2 };
+      if (extend(ch, makeRng(seed * 131 + attempt * 7919), size, Math.max(size.blocks, ch.placed.length + 4))) return codeOf(ch);
+    }
+    return null;
+  }
+  /* special tiles of a track as the builder stores them */
+  function tilesOf(track) {
+    const tiles = {};
+    for (const c of track.cells) {
+      if (track.blocks[c.block].kind !== 'B2') continue;
+      if (c.type === 'tp') tiles[c.i] = 'tp:' + c.color;
+      else if (AR.KIT.straight[c.type] !== undefined) tiles[c.i] = c.type;
+    }
+    return tiles;
+  }
+  /* any track as a builder design: the same blocks and specials (pit stops and signs get placed anew) */
+  function designOf(track) {
+    if (track.design) return track.design;
+    return { code: track.pieces.slice(1).map((pc, k) => letter(track.blocks[k + 1].kind, pc.piece.dir)).join(''), seed: track.seed, tiles: tilesOf(track) };
+  }
+
+  AR.Track = { generate, build, nextBlocks, complete, tilesOf, designOf, pathD, DIRS, R, TP_COLORS };
 })();

@@ -89,12 +89,30 @@
           <button type="button" role="radio" data-size="long" data-i18n="sizeLong"></button>
         </div>
         <button type="button" id="btn-reroll" class="btn small" data-i18n="reroll"></button>
+        <button type="button" id="btn-build" class="btn small" data-i18n="buildBtn"></button>
       </div>
       <p class="hint mono" id="track-stats"></p>
       <button type="button" id="btn-start" class="btn primary big" data-i18n="start"></button>
       <p id="client-wait" class="client-wait" data-i18n="netWaiting" hidden></p>
     </section>
   </div>
+</main>
+
+<!-- TRACK BUILDER -->
+<main id="builder" class="builder" hidden>
+  <div id="builder-board" class="scene"></div>
+  <header class="hud-top">
+    <div class="hud-left">
+      <span class="wordmark small"><span>Animal</span> <span>Rally</span></span>
+      <span class="turn-info" id="build-info"></span>
+    </div>
+    <div class="hud-tools">
+      <span class="seg view-seg mini" role="group" data-i18n-aria="boardView"><button type="button" data-view="3d">3D</button><button type="button" data-view="2d">2D</button></span>
+      <button type="button" id="build-cancel" class="btn small" data-i18n="buildCancel"></button>
+      <button type="button" id="build-done" class="btn small primary" data-i18n="buildDone"></button>
+    </div>
+  </header>
+  <section class="sticker build-panel" id="build-panel" aria-labelledby="build-info"></section>
 </main>
 
 <!-- GAME -->

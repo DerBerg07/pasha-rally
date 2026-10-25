@@ -267,6 +267,7 @@
         }
         half = Math.max(half, Math.max(ey * h / availH, ex * h / availW) * 1.04);
       }
+      half = Math.max(half, 3.2); // a very short track should not fill the whole screen
       this.fitHalf = half;
       this.want.base.copy(base);
       this.want.half = this.follow ? half / 2.2 : half;
@@ -395,7 +396,8 @@
       return o;
     }
 
-    render(track) {
+    /* opts.smooth: glide the camera to the new framing (the track builder re-renders on every block) */
+    render(track, opts = {}) {
       this.ensure();
       // coming back from the flat board: put the canvas back into the stage
       if (this.renderer.domElement.parentNode !== this.host) { this.host.innerHTML = ''; this.host.appendChild(this.renderer.domElement); }
@@ -412,7 +414,8 @@
       for (const k in track.checks) { const ch = track.checks[k]; if (ch.sx !== undefined) this.occupied.push({ x: ch.sx, y: ch.sy, r: 0.3 }); }
       for (const ec of track.cells) if (ec.type === 'exit') { const t = track.cells[ec.exitTo]; this.occupied.push({ x: (ec.x + t.x) / 2, y: (ec.y + t.y) / 2, r: 0.6 }); }
       const b = track.bbox, m = 1.3;
-      this.bounds = { x0: b.x - m, x1: b.x + b.w + m, z0: b.y - m, z1: b.y + b.h + m };
+      const ex = Math.max(0, 9 - b.w) / 2, ez = Math.max(0, 6 - b.h) / 2; // a sensible island under a very short track
+      this.bounds = { x0: b.x - m - ex, x1: b.x + b.w + m + ex, z0: b.y - m - ez, z1: b.y + b.h + m + ez };
       const B = this.bounds, W = B.x1 - B.x0, D = B.z1 - B.z0;
       const W0 = this.world;
 
@@ -496,6 +499,7 @@
 
       // START / FINISH arches
       for (const c of [cells[0], cells[track.finish]]) {
+        if (c.type !== 'start' && c.type !== 'finish') continue; // a track still being built has no finish yet
         const a = Mo.arch(c.type);
         a.position.set(c.x, 0.05, c.y);
         a.rotation.y = -headingOf(c);
@@ -590,7 +594,7 @@
       this.addScenery(rand);
       mergeStatic(this.statics, this.world, this.own);
       this.fitShadow();
-      this.fit(true);
+      this.fit(!opts.smooth);
       return this.renderer.domElement;
     }
 
